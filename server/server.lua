@@ -54,8 +54,9 @@ RegisterNetEvent('rex-ranch:server:buylivestock', function(data)
     end
 
     local animalid = CreateAnimalId()
+    local born = os.time()
 
-    MySQL.Async.insert('INSERT INTO rex_ranch_animals (ranchid, animalid, model, pos_x, pos_y, pos_z, pos_w, health) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', {
+    MySQL.Async.insert('INSERT INTO rex_ranch_animals (ranchid, animalid, model, pos_x, pos_y, pos_z, pos_w, health, born) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', {
         data.ranchid,
         animalid,
         data.animal,
@@ -63,7 +64,8 @@ RegisterNetEvent('rex-ranch:server:buylivestock', function(data)
         data.spawnpoint.y,
         data.spawnpoint.z,
         data.spawnpoint.w,
-        100
+        100,
+        born
     })
     Player.Functions.RemoveMoney('cash', tonumber(data.cowbuy))
 end)

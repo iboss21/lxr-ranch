@@ -8,5 +8,6 @@ CREATE TABLE IF NOT EXISTS `rex_ranch_animals` (
   `pos_z` float NOT NULL,
   `pos_w` float NOT NULL,
   `health` int(11) DEFAULT 100,
+  `born` INT UNSIGNED NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
