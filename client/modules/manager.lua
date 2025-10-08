@@ -19,7 +19,38 @@ RegisterNetEvent('rex-ranch:client:openmanagermenu', function(data)
                 args = { ranchid = data.ranchid },
                 arrow = true
             },
+            {
+                title = 'Buy Livestock',
+                icon = 'fa-solid fa-user-tie',
+                event = 'rex-ranch:client:buylivestock',
+                args = { ranchid = data.ranchid },
+                arrow = true
+            },
         }
     })
     lib.showContext('manager_job_menu')
+end)
+
+RegisterNetEvent('rex-ranch:client:buylivestock', function(data)
+    for _,ranchData in pairs(Config.RanchLocations) do
+        lib.registerContext({
+            id = 'manager_buu_livestock',
+            title = 'Livestock Menu',
+            options = {
+                {
+                    title = 'Buy Cow',
+                    icon = 'fa-solid fa-user-tie',
+                    serverEvent = 'rex-ranch:server:buylivestock',
+                    args = { 
+                        animal = 'a_c_cow',
+                        ranchid = ranchData.ranchid,
+                        spawnpoint = ranchData.spawnpoint,
+                        cowbuy = ranchData.cowbuy
+                    },
+                    arrow = true
+                },
+            }
+        })
+        lib.showContext('manager_buu_livestock')
+    end
 end)

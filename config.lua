@@ -1,4 +1,10 @@
 Config = {}
+Config.RanchAnimals = {}
+
+---------------------------------
+-- debug settings
+---------------------------------
+Config.Debug = false
 
 ---------------------------------
 -- npc settings
@@ -28,7 +34,8 @@ Config.RanchLocations = {
         blipsprite = 'blip_ambient_herd',
         blipscale = 0.2,
         showblip = true,
-        spawnpoint = vector4(-2425.51, -2367.51, 61.18, 82.40)
+        spawnpoint = vector4(-2425.51, -2367.51, 61.18, 82.40),
+        cowbuy = 1
     },
     { 
         name = 'Emerald Ranch',
@@ -41,7 +48,8 @@ Config.RanchLocations = {
         blipsprite = 'blip_ambient_herd',
         blipscale = 0.2,
         showblip = true,
-        spawnpoint = vector4(1400.58, 290.48, 88.57, 19.79)
+        spawnpoint = vector4(1400.58, 290.48, 88.57, 19.79),
+        cowbuy = 1
     },
     { 
         name = 'Pronghorn Ranch',
@@ -54,7 +62,8 @@ Config.RanchLocations = {
         blipsprite = 'blip_ambient_herd',
         blipscale = 0.2,
         showblip = true,
-        spawnpoint = vector4(-2567.10, 404.34, 148.61, 83.07)
+        spawnpoint = vector4(-2567.10, 404.34, 148.61, 83.07),
+        cowbuy = 1
     },
     { 
         name = 'Downes Ranch',
@@ -67,7 +76,8 @@ Config.RanchLocations = {
         blipsprite = 'blip_ambient_herd',
         blipscale = 0.2,
         showblip = true,
-        spawnpoint = vector4(-850.30, 334.23, 95.77, 189.21)
+        spawnpoint = vector4(-850.30, 334.23, 95.77, 189.21),
+        cowbuy = 1
     },
     { 
         name = 'Hill Haven Ranch',
@@ -80,7 +90,8 @@ Config.RanchLocations = {
         blipsprite = 'blip_ambient_herd',
         blipscale = 0.2,
         showblip = true,
-        spawnpoint = vector4(1373.20, -845.12, 70.56, 301.98)
+        spawnpoint = vector4(1373.20, -845.12, 70.56, 301.98),
+        cowbuy = 1
     },
     { 
         name = 'Hanging Dog Ranch',
@@ -93,6 +104,7 @@ Config.RanchLocations = {
         blipsprite = 'blip_ambient_herd',
         blipscale = 0.2,
         showblip = true,
-        spawnpoint = vector4(-2208.03, 719.73, 122.54, 185.14)
+        spawnpoint = vector4(-2208.03, 719.73, 122.54, 185.14),
+        cowbuy = 1
     }
 }
