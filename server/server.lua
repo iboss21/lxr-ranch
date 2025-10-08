@@ -49,7 +49,7 @@ RegisterNetEvent('rex-ranch:server:buylivestock', function(data)
 
     local playercash = Player.Functions.GetMoney('cash')
     if playercash < data.cowbuy then
-        TriggerClientEvent('ox_lib:notify', src, {title = 'Not Enough Cash', description = 'you don\'t have enough cash to do that!', type = 'error' })
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You don\'t have enough cash to do that!.'})
         return 
     end
 
