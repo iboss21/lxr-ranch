@@ -72,16 +72,19 @@ end)
 ---------------------------------------------
 RegisterNetEvent('rex-ranch:server:refreshAnimals', function()
     MySQL.query('SELECT * FROM `rex_ranch_animals`', {}, function(animals)
-        if animals then
+        if animals and #animals > 0 then
             TriggerClientEvent('rex-ranch:client:spawnAnimals', -1, animals)
             if Config.Debug then
-                print('^2[DEBUG]^7 Sent ' .. #animals .. ' animals entries to clients.')
+                print('^2[DEBUG]^7 Successfully sent ' .. #animals .. ' animals entries to clients (manual trigger).')
+            end
+        else
+            if Config.Debug then
+                print('^1[ERROR]^7 No animals found in database or query failed (manual trigger).')
             end
         end
     end)
 end)
 
---[[
 ---------------------------------------------
 -- on restart send animals to client from database
 ---------------------------------------------
@@ -96,4 +99,3 @@ AddEventHandler('onResourceStart', function(resourceName)
         end)
     end
 end)
---]]
