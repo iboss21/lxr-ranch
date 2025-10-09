@@ -32,7 +32,6 @@ RegisterNetEvent('rex-ranch:client:spawnAnimals', function(animalData)
             FreezeEntityPosition(animal, false)
             SetRandomOutfitVariation(animal, true)
             SetRelationshipBetweenGroups(1, GetPedRelationshipGroupHash(animal), joaat('PLAYER'))
-            TaskWanderInArea(animal, data.pos_x, data.pos_y, data.pos_z, 20.0)
             table.insert(spawnedAnimals, animal)
             spawnedCount = spawnedCount + 1
             SetModelAsNoLongerNeeded(model)

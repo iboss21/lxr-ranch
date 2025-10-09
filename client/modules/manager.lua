@@ -46,7 +46,7 @@ RegisterNetEvent('rex-ranch:client:buylivestock', function(data)
                             animal = 'a_c_cow',
                             ranchid = ranchData.ranchid,
                             spawnpoint = ranchData.spawnpoint,
-                            cowbuy = ranchData.cowbuy,
+                            cowbuy = Config.CowBuyPrice,
                             jobaccess = ranchData.jobaccess
                         },
                         arrow = true
