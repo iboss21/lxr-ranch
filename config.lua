@@ -1,5 +1,4 @@
 Config = {}
-Config.RanchAnimals = {}
 
 ---------------------------------
 -- debug settings

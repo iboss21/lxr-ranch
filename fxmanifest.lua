@@ -13,10 +13,7 @@ shared_scripts {
 client_scripts {
     'client/client.lua',
     'client/npcs.lua',
-    'client/modules/manager.lua',
-    'client/modules/ranchhand.lua',
-    'client/modules/trainee.lua',
-    'client/modules/animals.lua',
+    'client/modules/*.lua'
 }
 
 server_scripts {

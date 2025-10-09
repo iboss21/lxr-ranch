@@ -42,11 +42,6 @@ RegisterNetEvent('rex-ranch:server:buylivestock', function(data)
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player and not data then return end
 
-    if not Player.PlayerData.job.name == data.ranchid then
-        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'No permission.'})
-        return
-    end
-
     local playercash = Player.Functions.GetMoney('cash')
     if playercash < data.cowbuy then
         TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You don\'t have enough cash to do that!.'})
@@ -68,4 +63,37 @@ RegisterNetEvent('rex-ranch:server:buylivestock', function(data)
         born
     })
     Player.Functions.RemoveMoney('cash', tonumber(data.cowbuy))
+    TriggerEvent('rex-ranch:server:refreshAnimals')
+
 end)
+
+---------------------------------------------
+-- send animals to client side from database
+---------------------------------------------
+RegisterNetEvent('rex-ranch:server:refreshAnimals', function()
+    MySQL.query('SELECT * FROM `rex_ranch_animals`', {}, function(animals)
+        if animals then
+            TriggerClientEvent('rex-ranch:client:spawnAnimals', -1, animals)
+            if Config.Debug then
+                print('^2[DEBUG]^7 Sent ' .. #animals .. ' animals entries to clients.')
+            end
+        end
+    end)
+end)
+
+--[[
+---------------------------------------------
+-- on restart send animals to client from database
+---------------------------------------------
+AddEventHandler('onResourceStart', function(resourceName)
+    if GetCurrentResourceName() == resourceName then
+        Wait(5000)
+        MySQL.query('SELECT * FROM `rex_ranch_animals`', {}, function(animals)
+            if animals then
+                TriggerClientEvent('rex-ranch:client:spawnAnimals', -1, animals)
+                print('^2[REX-RANCH]^7 Sent ' .. #animals .. ' animals entries to clients.')
+            end
+        end)
+    end
+end)
+--]]

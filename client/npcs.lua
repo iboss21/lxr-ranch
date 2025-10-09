@@ -51,7 +51,7 @@ function NearPed(npcData)
             icon = 'far fa-eye',
             label = 'Open Ranch',
             onSelect = function()
-                TriggerEvent('rex-ranch:client:openranch', npcData)
+                TriggerEvent('rex-ranch:client:openranch', npcData.ranchid, npcData.jobaccess)
             end,
             distance = 2.0
         }
