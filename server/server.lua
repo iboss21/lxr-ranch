@@ -113,3 +113,42 @@ AddEventHandler('onResourceStart', function(resourceName)
         end)
     end
 end)
+
+---------------------------------------------
+-- animal cron system
+---------------------------------------------
+lib.cron.new(Config.AnimalCronJob, function()
+    MySQL.query('SELECT animalid, born FROM rex_ranch_animals', {}, function(animals)
+        if not animals or #animals == 0 then
+            print('^1[ERROR]^7 No animals found in database or query failed.')
+            return
+        end
+
+        local scaleTable = {
+            [0] = 0.5,
+            [1] = 0.6,
+            [2] = 0.7,
+            [3] = 0.8,
+            [4] = 0.9,
+            [5] = 1.0
+        }
+
+        for _, animal in ipairs(animals) do
+            if not animal.born then
+                print('^1[ERROR]^7 Invalid animal data: missing born field for animalid ' .. (animal.animalid or 'unknown'))
+                goto continue
+            end
+
+            local animalAge = math.floor((os.time() - animal.born) / (24 * 60 * 60))
+            if animalAge < 0 then
+                print('^1[ERROR]^7 Invalid birth date for animalid ' .. (animal.animalid or 'unknown'))
+                goto continue
+            end
+
+            local scale = scaleTable[math.min(animalAge, 5)] or 1.0
+            MySQL.update('UPDATE rex_ranch_animals SET scale = ? WHERE animalid = ?', {scale, animal.animalid})
+            MySQL.update('UPDATE rex_ranch_animals SET age = ? WHERE animalid = ?', {animalAge, animal.animalid})
+            ::continue::
+        end
+    end)
+end)

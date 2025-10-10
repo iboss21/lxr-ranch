@@ -19,6 +19,8 @@ Config.RanchStorageMaxWeight = 10000000
 Config.RanchStorageMaxSlots = 100
 Config.AnimalDistanceSpawn = 50.0
 Config.AnimalFadeIn = true
+Config.ServerNotify = true
+Config.AnimalCronJob = '0 * * * *' -- ever hour
 
 ---------------------------------
 -- animal buy/sell settings
