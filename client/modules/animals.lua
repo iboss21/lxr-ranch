@@ -95,10 +95,61 @@ end)
 -- animal menu
 ---------------------------------------------
 RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
+    -- animal age
+    local ageText = 'Youth'
+    if data.age < 5 then ageText = 'Youth' end
+    if data.age >= 5 then ageText = 'Adult' end
+    -- health colorScheme
+    local healthColorScheme = 'green'
+    if data.health > 80 then healthColorScheme = 'green' end
+    if data.health <= 80 and data.health > 10 then healthColorScheme = 'yellow' end
+    if data.health <= 10 then healthColorScheme = 'red' end
+    data.health = math.clamp(data.health, 0, 100) or math.min(math.max(data.health, 0), 100)
+
+    -- thirst colorScheme
+    local thirstColorScheme = 'green'
+    if data.thirst > 80 then thirstColorScheme = 'green' end
+    if data.thirst <= 80 and data.thirst > 10 then thirstColorScheme = 'yellow' end
+    if data.thirst <= 10 then thirstColorScheme = 'red' end
+    data.thirst = math.clamp(data.thirst, 0, 100) or math.min(math.max(data.thirst, 0), 100)
+
+    -- hunger colorScheme
+    local hungerColorScheme = 'green'
+    if data.hunger > 80 then hungerColorScheme = 'green' end
+    if data.hunger <= 80 and data.hunger > 10 then hungerColorScheme = 'yellow' end
+    if data.hunger <= 10 then hungerColorScheme = 'red' end
+    data.hunger = math.clamp(data.hunger, 0, 100) or math.min(math.max(data.hunger, 0), 100)
+
     lib.registerContext({
         id = 'animal_info_menu',
-        title = 'Animal Actions',
+        title = 'Animal Info',
         options = {
+            {
+                title = 'Brading - '..data.animalid,
+                icon = 'fa-solid fa-fingerprint',
+            },
+            {
+                title = 'Age - '..ageText,
+                icon = 'fa-solid fa-calendar-days',
+            },
+            {
+                title = 'Health - '..data.health,
+                progress = data.health,
+                colorScheme = healthColorScheme,
+                icon = 'fa-solid fa-heart-pulse',
+            },
+            {
+                title = 'Thirst - '..data.thirst,
+                progress = data.thirst,
+                colorScheme = thirstColorScheme,
+                icon = 'fa-solid fa-droplet',
+            },
+            {
+                title = 'Hunger - '..data.hunger,
+                progress = data.hunger,
+                colorScheme = hungerColorScheme,
+                icon = 'fa-solid fa-wheat-awn',
+            },
             {
                 title = 'Toggle Follow',
                 icon = 'fa-solid fa-eye',
