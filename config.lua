@@ -12,18 +12,12 @@ Config.DistanceSpawn = 20.0
 Config.FadeIn = true
 
 ---------------------------------
--- animal spawn settings
----------------------------------
-Config.AnimalDistanceSpawn = 20.0
-Config.AnimalFadeIn = true
-
----------------------------------
 -- ranch settings
 ---------------------------------
 Config.StorageMinJobGrade = 1
 Config.RanchStorageMaxWeight = 10000000
 Config.RanchStorageMaxSlots = 100
-Config.AnimalDistanceSpawn = 20
+Config.AnimalDistanceSpawn = 50.0
 Config.AnimalFadeIn = true
 
 ---------------------------------

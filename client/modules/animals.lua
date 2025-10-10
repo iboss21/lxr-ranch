@@ -1,22 +1,36 @@
 local RSGCore = exports['rsg-core']:GetCoreObject()
 local spawnedAnimals = {}
 local animalDataCache = {}
+local followStates = {}
+lib.locale()
 
+---------------------------------------------
+-- on player load refresh animals
+---------------------------------------------
 RegisterNetEvent('RSGCore:Client:OnPlayerLoaded', function()
     TriggerServerEvent('rex-ranch:server:refreshAnimals')
 end)
 
--- check distance and spawn animal
+---------------------------------------------
+-- check distance, spawn animal, and track position
+---------------------------------------------
 CreateThread(function()
     while true do
-        Wait(500)
-        for k,loadData in pairs(animalDataCache) do
+        Wait(1000)
+        for k, loadData in pairs(animalDataCache) do
             local playerCoords = GetEntityCoords(cache.ped)
-            local distance = #(playerCoords - vector3(loadData.pos_x, loadData.pos_y, loadData.pos_z))
+            local animalCoords = vector3(loadData.pos_x, loadData.pos_y, loadData.pos_z)
+            local distance = #(playerCoords - animalCoords)
+            
+            -- spawn animal if within range
             if distance < Config.AnimalDistanceSpawn and not spawnedAnimals[k] then
                 local spawnedAnimal = NearAnimal(loadData)
-                spawnedAnimals[k] = { spawnedAnimal = spawnedAnimal }
+                spawnedAnimals[k] = { 
+                    spawnedAnimal = spawnedAnimal
+                }
             end
+            
+            -- despawn animal if out of range
             if distance >= Config.AnimalDistanceSpawn and spawnedAnimals[k] then
                 if Config.AnimalFadeIn then
                     for i = 255, 0, -51 do
@@ -31,6 +45,9 @@ CreateThread(function()
     end
 end)
 
+---------------------------------------------
+-- animal spawner
+---------------------------------------------
 function NearAnimal(loadData)
     local model = GetHashKey(loadData.model)
     lib.requestModel(model, 5000)
@@ -58,7 +75,7 @@ function NearAnimal(loadData)
             icon = 'far fa-eye',
             label = 'Animal Actions',
             onSelect = function()
-                TriggerEvent('rex-ranch:client:animalmenu', loadData)
+                TriggerEvent('rex-ranch:client:animalmenu', spawnedAnimal, loadData)
             end,
             distance = 2.0
         }
@@ -66,19 +83,26 @@ function NearAnimal(loadData)
     return spawnedAnimal
 end
 
+---------------------------------------------
+-- move animal data to cache
+---------------------------------------------
 RegisterNetEvent('rex-ranch:client:spawnAnimals', function(animalData)
     animalDataCache = animalData
 end)
 
-RegisterNetEvent('rex-ranch:client:animalmenu', function(data)
+---------------------------------------------
+-- animal menu
+---------------------------------------------
+RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
     lib.registerContext({
         id = 'animal_info_menu',
-        title = 'Adimal Actions',
+        title = 'Animal Actions',
         options = {
             {
-                title = 'Ranch Management',
-                icon = 'fa-solid fa-user-tie',
-                event = 'rsg-bossmenu:client:mainmenu',
+                title = 'Toggle Follow',
+                icon = 'fa-solid fa-eye',
+                event = 'rex-ranch:client:animalfollow',
+                args = { animal = animal, animalid = data.animalid },
                 arrow = true
             },
         }
@@ -86,10 +110,41 @@ RegisterNetEvent('rex-ranch:client:animalmenu', function(data)
     lib.showContext('animal_info_menu')
 end)
 
+---------------------------------------------
+-- set animal to follow you
+---------------------------------------------
+RegisterNetEvent('rex-ranch:client:animalfollow', function(data)
+    -- validate entities
+    if not DoesEntityExist(data.animal) or not DoesEntityExist(cache.ped) then
+        lib.notify({ title = 'Error', description = 'Invalid animal or player!', type = 'error' })
+        return
+    end
+    -- check if animal is dead
+    if IsPedDeadOrDying(data.animal, true) then
+        lib.notify({ title = 'Animal Dead', description = 'This animal is dead!', type = 'error' })
+        return 
+    end
+    -- toggle follow state for this animal
+    followStates[data.animalid] = not followStates[data.animalid] or false
+    if followStates[data.animalid] then
+        local playerCoords = GetEntityCoords(cache.ped)
+        local animalOffset = vector3(0.0, 2.0, 0.0)
+        ClearPedTasks(data.animal)
+        TaskFollowToOffsetOfEntity(data.animal, cache.ped, animalOffset.x, animalOffset.y, animalOffset.z, 1.0, -1, 0.0, 1)
+        lib.notify({ title = 'Animal Following!', description = 'The animal is now following you.', duration = 5000, type = 'info' })
+    else
+        local currentPos = GetEntityCoords(data.animal)
+        local heading = GetEntityHeading(data.animal)
+        ClearPedTasks(data.animal) -- stop following, let animal idle
+        TriggerServerEvent('rex-ranch:server:saveAnimalPosition', data.animalid, currentPos.x, currentPos.y, currentPos.z, heading)
+        lib.notify({ title = 'Animal Stopped', description = 'The animal stopped following you.', duration = 5000, type = 'info' })
+    end
+end)
+
 ---------------------------------
 -- cleanup
 ---------------------------------
-AddEventHandler("onResourceStop", function(resourceName)
+AddEventHandler('onResourceStop', function(resourceName)
     if GetCurrentResourceName() ~= resourceName then return end
     for k,v in pairs(spawnedAnimals) do
         DeletePed(spawnedAnimals[k].spawnedAnimal)

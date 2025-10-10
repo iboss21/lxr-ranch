@@ -74,15 +74,29 @@ RegisterNetEvent('rex-ranch:server:refreshAnimals', function()
     MySQL.query('SELECT * FROM `rex_ranch_animals`', {}, function(animals)
         if animals and #animals > 0 then
             TriggerClientEvent('rex-ranch:client:spawnAnimals', -1, animals)
-            if Config.Debug then
-                print('^2[DEBUG]^7 Successfully sent ' .. #animals .. ' animals entries to clients (manual trigger).')
-            end
+            print('^2[DEBUG]^7 Successfully sent ' .. #animals .. ' animals entries to clients.')
         else
-            if Config.Debug then
-                print('^1[ERROR]^7 No animals found in database or query failed (manual trigger).')
-            end
+            print('^1[ERROR]^7 No animals found in database or query failed.')
         end
     end)
+end)
+
+---------------------------------------------
+-- save animal position to database
+---------------------------------------------
+RegisterNetEvent('rex-ranch:server:saveAnimalPosition', function(animalid, pos_x, pos_y, pos_z, pos_w)
+    local src = source
+    local Player = RSGCore.Functions.GetPlayer(src)
+    if not Player and not animalid then return end
+    -- update the animal's position in the database
+    MySQL.update.await('UPDATE rex_ranch_animals SET pos_x = ?, pos_y = ?, pos_z = ?, pos_w = ? WHERE animalid = ?', {
+        pos_x,
+        pos_y,
+        pos_z,
+        pos_w,
+        animalid
+    })
+    TriggerEvent('rex-ranch:server:refreshAnimals')
 end)
 
 ---------------------------------------------
