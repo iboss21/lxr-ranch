@@ -21,6 +21,7 @@ Config.AnimalDistanceSpawn = 50.0
 Config.AnimalFadeIn = true
 Config.ServerNotify = true
 Config.AnimalCronJob = '0 * * * *' -- ever hour
+Config.MaxRanchAnimals = 10
 
 ---------------------------------
 -- animal buy/sell settings

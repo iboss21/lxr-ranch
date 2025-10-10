@@ -35,6 +35,24 @@ local function CreateAnimalId()
 end
 
 ---------------------------------------------
+-- count amount of animals the ranch owns
+---------------------------------------------
+RSGCore.Functions.CreateCallback('rex-ranch:server:countanimals', function(source, cb, ranchid)
+    local src = source
+    local Player = RSGCore.Functions.GetPlayer(src)
+    if not Player or not ranchid then return end
+    local success, result = pcall(function()
+        return MySQL.prepare.await("SELECT COUNT(*) as count FROM rex_ranch_animals WHERE ranchid = ?", { ranchid })
+    end)
+    if success and result then
+        cb(result)
+    else
+        cb(nil)
+        print("error querying animal count for ranchid: " .. tostring(ranchid))
+    end
+end)
+
+---------------------------------------------
 -- ranch buy livestock and add to database
 ---------------------------------------------
 RegisterNetEvent('rex-ranch:server:buylivestock', function(data)

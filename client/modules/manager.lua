@@ -32,28 +32,34 @@ RegisterNetEvent('rex-ranch:client:openmanagermenu', function(ranchid)
 end)
 
 RegisterNetEvent('rex-ranch:client:buylivestock', function(data)
-    for _,ranchData in pairs(Config.RanchLocations) do
-        if ranchData.ranchid == data.ranchid then
-            lib.registerContext({
-                id = 'manager_buu_livestock',
-                title = 'Livestock Menu',
-                options = {
-                    {
-                        title = 'Buy Cow',
-                        icon = 'fa-solid fa-user-tie',
-                        serverEvent = 'rex-ranch:server:buylivestock',
-                        args = { 
-                            animal = 'a_c_cow',
-                            ranchid = ranchData.ranchid,
-                            spawnpoint = ranchData.spawnpoint,
-                            cowbuy = Config.CowBuyPrice,
-                            jobaccess = ranchData.jobaccess
-                        },
-                        arrow = true
-                    },
-                }
-            })
-            lib.showContext('manager_buu_livestock')
+    RSGCore.Functions.TriggerCallback('rex-ranch:server:countanimals', function(count)
+        if count <= Config.MaxRanchAnimals then
+            for _,ranchData in pairs(Config.RanchLocations) do
+                if ranchData.ranchid == data.ranchid then
+                    lib.registerContext({
+                        id = 'manager_buu_livestock',
+                        title = 'Livestock Menu',
+                        options = {
+                            {
+                                title = 'Buy Cow',
+                                icon = 'fa-solid fa-user-tie',
+                                serverEvent = 'rex-ranch:server:buylivestock',
+                                args = { 
+                                    animal = 'a_c_cow',
+                                    ranchid = ranchData.ranchid,
+                                    spawnpoint = ranchData.spawnpoint,
+                                    cowbuy = Config.CowBuyPrice,
+                                    jobaccess = ranchData.jobaccess
+                                },
+                                arrow = true
+                            },
+                        }
+                    })
+                    lib.showContext('manager_buu_livestock')
+                end
+            end
+        else
+            lib.notify({ title = 'Max Reached', description = 'you have the maximum ranch animals!', type = 'error' })
         end
-    end
+    end, data.ranchid)
 end)
