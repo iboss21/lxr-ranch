@@ -15,10 +15,20 @@ CREATE TABLE IF NOT EXISTS `rex_ranch_animals` (
   `scale` decimal(3,2) DEFAULT 0.50,
   `last_production` int(10) unsigned DEFAULT 0,
   `product_ready` tinyint(1) DEFAULT 0,
+  `gender` enum('male','female') DEFAULT 'female',
+  `pregnant` tinyint(1) DEFAULT 0,
+  `gestation_end_time` int(10) unsigned DEFAULT NULL,
+  `breeding_ready_time` int(10) unsigned DEFAULT 0,
+  `breeding_attempts` int(10) unsigned DEFAULT 0,
+  `mother_id` varchar(50) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_animalid` (`animalid`),
   KEY `idx_ranchid` (`ranchid`),
   KEY `idx_animalid` (`animalid`),
   KEY `idx_product_ready` (`product_ready`),
-  KEY `idx_ranchid_product` (`ranchid`,`product_ready`)
+  KEY `idx_ranchid_product` (`ranchid`,`product_ready`),
+  KEY `idx_pregnant` (`pregnant`),
+  KEY `idx_gender` (`gender`),
+  KEY `idx_breeding_ready` (`breeding_ready_time`),
+  KEY `idx_mother_id` (`mother_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;

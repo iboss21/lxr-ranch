@@ -63,6 +63,9 @@ Config.CowSellPrice = 1
 Config.SheepBuyPrice = 80
 Config.SheepSellPrice = 1
 ---------------------------------
+Config.BullBuyPrice = 350
+Config.BullSellPrice = 1
+---------------------------------
 
 ---------------------------------
 -- animal sale point settings
@@ -85,13 +88,17 @@ Config.BaseSellPrices = {
     ['a_c_cow'] = 150,
     ['a_c_sheep_01'] = 80,
     ['a_c_pig_01'] = 100,
-    ['a_c_horse_americanpaint_greyovero'] = 300
+    ['a_c_horse_americanpaint_greyovero'] = 300,
+    ['a_c_bull_01'] = 400
 }
 
 -- Sale point settings
 Config.AnimalSaleDistance = 15.0 -- Distance animal must be within sale point to sell
 Config.RequireAnimalPresent = false -- Set to false to disable physical animal requirement (temporarily disabled for testing)
 Config.TransportMode = true -- Keep animals spawned when being herded, regardless of distance
+
+-- Buy point settings
+Config.BuyPointSpawnDistance = 8.0 -- Distance from buy point where animals can spawn
 ---------------------------------
 
 ---------------------------------
@@ -100,6 +107,66 @@ Config.TransportMode = true -- Keep animals spawned when being herded, regardles
 Config.ProductionEnabled = true
 Config.ProductionCheckInterval = 3600 -- seconds (1 hour)
 Config.MinAgeForProduction = 2 -- days old before animals can produce
+
+---------------------------------
+-- animal breeding settings
+---------------------------------
+Config.BreedingEnabled = true
+Config.MinAgeForBreeding = 3 -- days old before animals can breed
+Config.MaxBreedingAge = 15 -- days old after which animals can't breed
+Config.BreedingDistance = 10.0 -- maximum distance between animals to breed
+Config.BreedingCooldown = 172800 -- 2 days in seconds before animal can breed again
+Config.RequireHealthForBreeding = 70 -- minimum health required for breeding
+Config.RequireHungerForBreeding = 50 -- minimum hunger required for breeding
+Config.RequireThirstForBreeding = 50 -- minimum thirst required for breeding
+
+-- Gender ratios when buying animals (chance of male)
+Config.GenderRatios = {
+    ['a_c_cow'] = 0.3,           -- 30% chance of bull, 70% chance of cow
+    ['a_c_sheep_01'] = 0.4,      -- 40% chance of ram, 60% chance of ewe
+    ['a_c_pig_01'] = 0.3,        -- 30% chance of boar, 70% chance of sow
+    ['a_c_horse_americanpaint_greyovero'] = 0.5, -- 50% chance of stallion/mare
+    ['a_c_bull_01'] = 1.0        -- 100% chance of male (it's specifically a bull)
+}
+
+-- Breeding configurations per animal type
+Config.BreedingConfig = {
+    ['a_c_cow'] = {
+        gestationPeriod = 259200,    -- 3 days in seconds (represents 9 months)
+        offspringCount = { min = 1, max = 1 }, -- always 1 calf
+        breedingSeasonStart = 1,     -- day of year (1-365)
+        breedingSeasonEnd = 365,     -- year-round breeding
+        enabled = true
+    },
+    ['a_c_sheep_01'] = {
+        gestationPeriod = 172800,    -- 2 days in seconds (represents 5 months)
+        offspringCount = { min = 1, max = 2 }, -- 1-2 lambs
+        breedingSeasonStart = 60,    -- spring breeding (day 60)
+        breedingSeasonEnd = 150,     -- end of spring (day 150)
+        enabled = true
+    },
+    ['a_c_pig_01'] = {
+        gestationPeriod = 129600,    -- 1.5 days in seconds (represents 4 months)
+        offspringCount = { min = 2, max = 4 }, -- 2-4 piglets
+        breedingSeasonStart = 1,     -- year-round breeding
+        breedingSeasonEnd = 365,
+        enabled = true
+    },
+    ['a_c_horse_americanpaint_greyovero'] = {
+        gestationPeriod = 388800,    -- 4.5 days in seconds (represents 11 months)
+        offspringCount = { min = 1, max = 1 }, -- always 1 foal
+        breedingSeasonStart = 90,    -- spring breeding (day 90)
+        breedingSeasonEnd = 240,     -- summer end (day 240)
+        enabled = true
+    },
+    ['a_c_bull_01'] = {
+        gestationPeriod = 259200,    -- 3 days in seconds (same as cows, represents 9 months)
+        offspringCount = { min = 1, max = 1 }, -- always 1 calf
+        breedingSeasonStart = 1,     -- year-round breeding
+        breedingSeasonEnd = 365,
+        enabled = true
+    }
+}
 
 Config.AnimalProducts = {
     ['a_c_cow'] = {
@@ -133,6 +200,14 @@ Config.AnimalProducts = {
         requiresHealth = 70,
         requiresHunger = 50,
         requiresThirst = 50
+    },
+    ['a_c_bull_01'] = {
+        product = 'hide',
+        productionTime = 86400, -- 24 hours in seconds (longer production time)
+        amount = 1,
+        requiresHealth = 60,
+        requiresHunger = 40,
+        requiresThirst = 40
     }
 }
 ---------------------------------
@@ -262,33 +337,36 @@ Config.SalePointLocations = {
 ---------------------------------
 Config.BuyPointLocations = {
     {
-        name = 'Valentine Livestock Dealer',
+        name = 'Livestock Dealer',
         coords = vector3(-335.76, 785.23, 116.18),
-        npcmodel = `u_m_m_valtrader_01`,
+        npcmodel = `mp_u_m_m_trader_01`,
         npccoords = vector4(-335.76, 785.23, 116.18, 180.0),
         blipname = 'Livestock Dealer',
         blipsprite = 'blip_shop_horse',
         blipscale = 0.2,
-        showblip = true
+        showblip = true,
+        spawnpoint = vector4(-340.50, 788.30, 116.18, 270.0) -- Near the dealer
     },
     {
-        name = 'Strawberry Animal Trader',
+        name = 'Animal Trader',
         coords = vector3(-1792.84, -394.56, 160.33),
-        npcmodel = `u_m_m_valtrader_01`,
+        npcmodel = `mp_u_m_m_trader_01`,
         npccoords = vector4(-1792.84, -394.56, 160.33, 90.0),
         blipname = 'Animal Trader',
         blipsprite = 'blip_shop_horse',
         blipscale = 0.2,
-        showblip = true
+        showblip = true,
+        spawnpoint = vector4(-1790.00, -398.00, 160.33, 180.0) -- Near the trader
     },
     {
-        name = 'Rhodes Livestock Merchant',
+        name = 'Livestock Merchant',
         coords = vector3(1226.67, -1295.45, 76.04),
-        npcmodel = `u_m_m_valtrader_01`,
+        npcmodel = `mp_u_m_m_trader_01`,
         npccoords = vector4(1226.67, -1295.45, 76.04, 270.0),
         blipname = 'Livestock Merchant',
         blipsprite = 'blip_shop_horse',
         blipscale = 0.2,
-        showblip = true
+        showblip = true,
+        spawnpoint = vector4(1230.00, -1298.00, 76.04, 0.0) -- Near the merchant
     }
 }

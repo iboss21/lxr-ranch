@@ -623,48 +623,30 @@ function CreateAnimalBlip(animalId, entity, model)
         return nil
     end
 
-    local blip = nil
     local entityPos = GetEntityCoords(entity)
+    local blip = nil
     
-    -- Use RedM-specific native for entity-based blip
-    blip = Citizen.InvokeNative(0x23F74C2FDA6E7C61, -1230993421, entity) -- BLIP_STYLE_ENEMY (or use Config.HerdingBlipStyle)
+    -- Create coordinate-based blip (more reliable in RedM)
+    blip = BlipAddForCoords(1664425300, entityPos.x, entityPos.y, entityPos.z)
     
     if blip and blip ~= 0 then
-        -- Set blip sprite (using a known RedM-compatible sprite)
-        local blipSprite = Config.HerdingBlipSprite or 1417210644 -- Default to cow sprite (BLIP_SPRITE_ANIMAL_COW)
-        Citizen.InvokeNative(0x9CB1A1623062F402, blip, blipSprite) -- SetBlipSprite
+        -- Set blip sprite
+        local blipSprite = joaat(Config.HerdingBlipSprite) or joaat('blip_ambient_herd')
+        SetBlipSprite(blip, blipSprite, true)
         
         -- Set blip name
         local animalName = GetAnimalDisplayName(model)
-        Citizen.InvokeNative(0x9CB1A1623062F402, blip, animalName .. ' (Herding)') -- SetBlipNameFromTextFile
+        SetBlipName(blip, animalName .. ' (Herding)')
         
         -- Set blip scale
         local blipScale = Config.HerdingBlipScale or 0.2
-        Citizen.InvokeNative(0x662D364ABF16DE2F, blip, GetHashKey("BLIP_MODIFIER_SCALE"), blipScale) -- SetBlipScale via modifier
-        
-        -- Set blip color (optional, e.g., white)
-        Citizen.InvokeNative(0x662D364ABF16DE2F, blip, GetHashKey("BLIP_MODIFIER_COLOR"), 0) -- BLIP_COLOR_WHITE
+        SetBlipScale(blip, blipScale)
         
         if Config.Debug then
             print('^2[HERDING DEBUG]^7 Created blip ' .. blip .. ' for animal ' .. animalId .. ' (' .. animalName .. ') at ' .. tostring(entityPos))
         end
         
         return blip
-    else
-        -- Fallback to coordinate-based blip
-        blip = Citizen.InvokeNative(0x554D9D53F696D002, 1664425300, entityPos.x, entityPos.y, entityPos.z) -- BlipAddForCoords
-        
-        if blip and blip ~= 0 then
-            local blipSprite = Config.HerdingBlipSprite or 1417210644
-            Citizen.InvokeNative(0x9CB1A1623062F402, blip, blipSprite)
-            Citizen.InvokeNative(0x9CB1A1623062F402, blip, GetAnimalDisplayName(model) .. ' (Herding)')
-            Citizen.InvokeNative(0x662D364ABF16DE2F, blip, GetHashKey("BLIP_MODIFIER_SCALE"), Config.HerdingBlipScale or 0.2)
-            
-            if Config.Debug then
-                print('^3[HERDING DEBUG]^7 Created fallback coordinate blip ' .. blip .. ' for animal ' .. animalId .. ' at ' .. tostring(entityPos))
-            end
-            return blip
-        end
     end
     
     if Config.Debug then
@@ -677,8 +659,8 @@ end
 function RemoveAnimalBlip(animalId)
     if animalBlips[animalId] then
         local blip = animalBlips[animalId]
-        if Citizen.InvokeNative(0xF2B1D9C125BDEED, blip) then -- DoesBlipExist
-            Citizen.InvokeNative(0x3D3F3016B0B3AA33, blip) -- RemoveBlip
+        if DoesBlipExist(blip) then
+            RemoveBlip(blip)
             if Config.Debug then
                 print('^1[HERDING DEBUG]^7 Removed blip ' .. blip .. ' for animal ' .. animalId)
             end
@@ -689,8 +671,8 @@ end
 
 function RemoveAllAnimalBlips()
     for animalId, blip in pairs(animalBlips) do
-        if Citizen.InvokeNative(0xF2B1D9C125BDEED, blip) then
-            Citizen.InvokeNative(0x3D3F3016B0B3AA33, blip)
+        if DoesBlipExist(blip) then
+            RemoveBlip(blip)
             if Config.Debug then
                 print('^1[HERDING DEBUG]^7 Removed blip ' .. blip .. ' for animal ' .. animalId)
             end

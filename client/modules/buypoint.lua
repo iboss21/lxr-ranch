@@ -32,7 +32,8 @@ local function CleanupExistingBuyPointNPCs()
             -- Check if this ped is at a buy point location
             local pedCoords = GetEntityCoords(ped)
             for _, buyPointData in pairs(Config.BuyPointLocations) do
-                local distance = #(pedCoords - buyPointData.npccoords.xyz)
+                local npcCoords = vector3(buyPointData.npccoords.x, buyPointData.npccoords.y, buyPointData.npccoords.z)
+                local distance = #(pedCoords - npcCoords)
                 if distance < 2.0 and GetEntityModel(ped) == buyPointData.npcmodel then
                     DeletePed(ped)
                     cleanedCount = cleanedCount + 1
@@ -55,7 +56,7 @@ CreateThread(function()
     Wait(500)
     
     for i, buyPointData in pairs(Config.BuyPointLocations) do
-        lib.requestModel(buyPointData.npcmodel, Config.Debug)
+        lib.requestModel(buyPointData.npcmodel, 10000)
         
         local buyPointNPC = CreatePed(buyPointData.npcmodel, buyPointData.npccoords.x, buyPointData.npccoords.y, buyPointData.npccoords.z - 1, buyPointData.npccoords.w, false, true, 0, 0)
         Citizen.InvokeNative(0x283978A15512B2FE, buyPointNPC, true)
@@ -70,18 +71,16 @@ CreateThread(function()
         buyPointNPCs[i] = buyPointNPC
         
         -- target interaction
-        exports['rsg-target']:AddTargetEntity(buyPointNPC, {
-            options = {
-                {
-                    icon = "fas fa-shopping-cart",
-                    label = "Buy Animals",
-                    targeticon = "fas fa-eye",
-                    action = function()
-                        TriggerEvent('rex-ranch:client:openBuyMenu', buyPointData)
-                    end,
-                }
-            },
-            distance = 3.0,
+        exports.ox_target:addLocalEntity(buyPointNPC, {
+            {
+                name = 'buy_point_npc',
+                icon = 'fas fa-shopping-cart',
+                label = 'Buy Animals',
+                onSelect = function()
+                    TriggerEvent('rex-ranch:client:openBuyMenu', buyPointData)
+                end,
+                distance = 3.0
+            }
         })
         
         if Config.Debug then
@@ -152,7 +151,7 @@ RegisterNetEvent('rex-ranch:client:openBuyMenu', function(buyPointData)
                         animalName = 'Cow',
                         price = Config.CowBuyPrice,
                         ranchData = playerRanchData,
-                        buyPointName = buyPointData.name
+                        buyPointData = buyPointData
                     })
                 end,
                 arrow = true
@@ -169,7 +168,24 @@ RegisterNetEvent('rex-ranch:client:openBuyMenu', function(buyPointData)
                         animalName = 'Sheep',
                         price = Config.SheepBuyPrice,
                         ranchData = playerRanchData,
-                        buyPointName = buyPointData.name
+                        buyPointData = buyPointData
+                    })
+                end,
+                arrow = true
+            })
+            
+            -- Bull option
+            table.insert(options, {
+                title = '🐂 Buy Bull',
+                description = 'Price: $' .. Config.BullBuyPrice .. ' | Strong breeding bull for cattle production',
+                icon = 'fa-solid fa-dollar-sign',
+                onSelect = function()
+                    TriggerEvent('rex-ranch:client:confirmBuyAnimal', {
+                        animalType = 'a_c_bull_01',
+                        animalName = 'Bull',
+                        price = Config.BullBuyPrice,
+                        ranchData = playerRanchData,
+                        buyPointData = buyPointData
                     })
                 end,
                 arrow = true
@@ -195,7 +211,7 @@ RegisterNetEvent('rex-ranch:client:openBuyMenu', function(buyPointData)
         })
         lib.showContext('buy_point_menu')
         
-    end, playerjob)
+    end, playerRanchData.ranchid)
 end)
 
 ---------------------------------------------
@@ -218,7 +234,7 @@ RegisterNetEvent('rex-ranch:client:confirmBuyAnimal', function(data)
     -- Show confirmation dialog
     local alert = lib.alertDialog({
         header = 'Confirm Purchase',
-        content = 'Are you sure you want to buy this ' .. data.animalName .. ' for $' .. data.price .. '?\\n\\nThe animal will be delivered to ' .. data.ranchData.name .. '.',
+        content = 'Are you sure you want to buy this ' .. data.animalName .. ' for $' .. data.price .. '?\\n\\nThe animal will be available for pickup near the ' .. data.buyPointData.name .. '.',
         centered = true,
         cancel = true
     })
@@ -232,8 +248,8 @@ RegisterNetEvent('rex-ranch:client:confirmBuyAnimal', function(data)
             animalName = data.animalName,
             price = data.price,
             ranchid = data.ranchData.ranchid,
-            spawnpoint = data.ranchData.spawnpoint,
-            buyPointName = data.buyPointName
+            spawnpoint = data.buyPointData.spawnpoint,
+            buyPointName = data.buyPointData.name
         })
     end
 end)
@@ -247,7 +263,7 @@ AddEventHandler('onResourceStop', function(resourceName)
     -- Clean up buy point NPCs
     for i, npc in pairs(buyPointNPCs) do
         if DoesEntityExist(npc) then
-            exports['rsg-target']:RemoveTargetEntity(npc)
+            exports.ox_target:removeLocalEntity(npc, 'buy_point_npc')
             DeletePed(npc)
             if Config.Debug then
                 print('^1[BUYPOINT DEBUG]^7 Cleaned up buy point NPC ' .. i .. ' (entity: ' .. npc .. ')')

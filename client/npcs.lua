@@ -6,7 +6,8 @@ CreateThread(function()
         Wait(500)
         for k,npcData in pairs(Config.RanchLocations) do
             local playerCoords = GetEntityCoords(cache.ped)
-            local distance = #(playerCoords - npcData.npccoords.xyz)
+            local npcCoords = vector3(npcData.npccoords.x, npcData.npccoords.y, npcData.npccoords.z)
+            local distance = #(playerCoords - npcCoords)
             if distance < Config.DistanceSpawn and not spawnedPeds[k] then
                 local spawnedPed = NearPed(npcData)
                 spawnedPeds[k] = { spawnedPed = spawnedPed }

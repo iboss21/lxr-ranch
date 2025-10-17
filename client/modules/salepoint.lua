@@ -32,7 +32,8 @@ local function CleanupExistingSalePointNPCs()
             -- Check if this ped is at a sale point location
             local pedCoords = GetEntityCoords(ped)
             for _, salePointData in pairs(Config.SalePointLocations) do
-                local distance = #(pedCoords - salePointData.npccoords.xyz)
+                local npcCoords = vector3(salePointData.npccoords.x, salePointData.npccoords.y, salePointData.npccoords.z)
+                local distance = #(pedCoords - npcCoords)
                 if distance < 2.0 and GetEntityModel(ped) == salePointData.npcmodel then
                     DeletePed(ped)
                     cleanedCount = cleanedCount + 1
@@ -55,7 +56,7 @@ CreateThread(function()
     Wait(500)
     
     for i, salePointData in pairs(Config.SalePointLocations) do
-        lib.requestModel(salePointData.npcmodel, Config.Debug)
+        lib.requestModel(salePointData.npcmodel, 10000)
         
         local salePointNPC = CreatePed(salePointData.npcmodel, salePointData.npccoords.x, salePointData.npccoords.y, salePointData.npccoords.z - 1, salePointData.npccoords.w, false, true, 0, 0)
         Citizen.InvokeNative(0x283978A15512B2FE, salePointNPC, true)
@@ -70,18 +71,16 @@ CreateThread(function()
         salePointNPCs[i] = salePointNPC
         
         -- target interaction
-        exports['rsg-target']:AddTargetEntity(salePointNPC, {
-            options = {
-                {
-                    icon = "fas fa-hand-paper",
-                    label = "Sell Animals",
-                    targeticon = "fas fa-eye",
-                    action = function()
-                        TriggerEvent('rex-ranch:client:openSaleMenu', salePointData)
-                    end,
-                }
-            },
-            distance = 3.0,
+        exports.ox_target:addLocalEntity(salePointNPC, {
+            {
+                name = 'sale_point_npc',
+                icon = 'fas fa-hand-paper',
+                label = 'Sell Animals',
+                onSelect = function()
+                    TriggerEvent('rex-ranch:client:openSaleMenu', salePointData)
+                end,
+                distance = 3.0
+            }
         })
         
         if Config.Debug then
@@ -396,7 +395,7 @@ AddEventHandler('onResourceStop', function(resourceName)
     -- Clean up sale point NPCs
     for i, npc in pairs(salePointNPCs) do
         if DoesEntityExist(npc) then
-            exports['rsg-target']:RemoveTargetEntity(npc)
+            exports.ox_target:removeLocalEntity(npc, 'sale_point_npc')
             DeletePed(npc)
         end
         salePointNPCs[i] = nil

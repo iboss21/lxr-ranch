@@ -4,6 +4,7 @@ local animalDataCache = {}
 local followStates = {}
 local transportingAnimals = {} -- Track animals being transported to prevent despawning
 local isBusy = false -- Global busy state for animal interactions
+local spawningLocks = {} -- Track animals currently being spawned to prevent duplicates
 lib.locale()
 
 ---------------------------------------------
@@ -30,12 +31,14 @@ CreateThread(function()
                     local animalCoords = vector3(tonumber(loadData.pos_x), tonumber(loadData.pos_y), tonumber(loadData.pos_z))
                     local distance = #(playerCoords - animalCoords)
                     
-                    -- Use animal ID as key instead of array index
-                    local animalKey = loadData.animalid or k
+                    -- Use consistent string key for animal ID
+                    local animalKey = tostring(loadData.animalid or k)
                     
-                    -- spawn animal if within range
-                    if distance < Config.AnimalDistanceSpawn and not spawnedAnimals[animalKey] then
+                    -- spawn animal if within range (with lock to prevent duplicates)
+                    if distance < Config.AnimalDistanceSpawn and not spawnedAnimals[animalKey] and not spawningLocks[animalKey] then
+                        spawningLocks[animalKey] = true
                         local spawnedAnimal = NearAnimal(loadData)
+                        spawningLocks[animalKey] = nil
                         if spawnedAnimal then
                             spawnedAnimals[animalKey] = { 
                                 spawnedAnimal = spawnedAnimal
@@ -100,9 +103,13 @@ function NearAnimal(loadData)
     NetworkRegisterEntityAsNetworked(spawnedAnimal)
     SetNetworkIdExistsOnAllMachines(NetworkGetNetworkIdFromEntity(spawnedAnimal), true)
     
-    -- Ensure scale is valid (between 0.1 and 2.0)
-    local scale = tonumber(loadData.scale) or 1.0
-    scale = math.min(math.max(scale, 0.1), 2.0)
+    -- Ensure scale is valid (between 0.1 and 2.0), handle NaN and invalid values
+    local scale = tonumber(loadData.scale)
+    if not scale or scale ~= scale or scale <= 0 then -- Check for nil, NaN, or invalid values
+        scale = 1.0
+    else
+        scale = math.min(math.max(scale, 0.1), 2.0)
+    end
     SetPedScale(spawnedAnimal, scale)
     SetEntityAsMissionEntity(spawnedAnimal, true, true)
     SetEntityInvincible(spawnedAnimal, false)
@@ -169,6 +176,7 @@ RegisterNetEvent('rex-ranch:client:spawnAnimals', function(animalData)
         spawnedAnimals[animalKey] = nil
         followStates[animalKey] = nil
         transportingAnimals[animalKey] = nil
+        spawningLocks[animalKey] = nil -- Clear spawning locks too
     end
     
     -- Update individual animal data in the cache for existing animals
@@ -211,10 +219,17 @@ RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
     freshData.age = freshData.age or 0
     freshData.animalid = freshData.animalid or data.animalid
     
+    -- Use database age field (calculated server-side)
+    local actualAge = freshData.age or 0
+    
+    -- Get gender info
+    local genderText = freshData.gender and freshData.gender:gsub("^%l", string.upper) or 'Unknown'
+    local pregnantStatus = freshData.pregnant == 1 and 'Pregnant' or 'Not Pregnant'
+    
     -- animal age
     local ageText = 'Youth'
-    if freshData.age < 5 then ageText = 'Youth' end
-    if freshData.age >= 5 then ageText = 'Adult' end
+    if actualAge < 5 then ageText = 'Youth' end
+    if actualAge >= 5 then ageText = 'Adult' end
     -- health colorScheme
     local healthColorScheme = 'green'
     if freshData.health > 80 then healthColorScheme = 'green' end
@@ -248,8 +263,14 @@ RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
             },
             {
                 title = 'Age: '..ageText,
-                description = freshData.age..' days old',
+                description = actualAge..' days old',
                 icon = 'fa-solid fa-calendar-days',
+                disabled = false
+            },
+            {
+                title = 'Gender: '..genderText:gsub("^%l", string.upper),
+                description = freshData.gender == 'female' and pregnantStatus or 'Male animal',
+                icon = freshData.gender == 'male' and 'fa-solid fa-mars' or 'fa-solid fa-venus',
                 disabled = false
             },
             {
@@ -312,6 +333,29 @@ RegisterNetEvent('rex-ranch:client:actionsmenu', function(data)
     local thirstStatus = freshData.thirst > 80 and 'Hydrated' or freshData.thirst > 50 and 'Thirsty' or 'Dehydrated'
     local followStatus = followStates[animalid] and 'Following' or 'Idle'
     
+    -- Use database age field (calculated server-side)
+    local actualAge = freshData.age or 0
+    
+    -- Get breeding status
+    local breedingStatus = 'Unknown'
+    
+    if Config.BreedingEnabled and Config.MinAgeForBreeding and Config.MaxBreedingAge and actualAge >= Config.MinAgeForBreeding and actualAge <= Config.MaxBreedingAge then
+        if freshData.gender == 'female' and freshData.pregnant == 1 then
+            breedingStatus = 'Pregnant'
+        elseif freshData.breeding_ready_time and freshData.breeding_ready_time > 0 then
+            -- Note: Server handles cooldown timing, just show that there is a cooldown
+            breedingStatus = 'Cooldown Active'
+        else
+            breedingStatus = 'Ready to Breed'
+        end
+    elseif Config.MinAgeForBreeding and actualAge < Config.MinAgeForBreeding then
+        breedingStatus = 'Too Young'
+    elseif Config.MaxBreedingAge and actualAge > Config.MaxBreedingAge then
+        breedingStatus = 'Too Old'
+    else
+        breedingStatus = 'Breeding Disabled'
+    end
+    
     lib.registerContext({
         id = 'animal_action_menu',
         title = 'Animal Actions',
@@ -352,6 +396,18 @@ RegisterNetEvent('rex-ranch:client:actionsmenu', function(data)
                 icon = 'fa-solid fa-gift',
                 event = 'rex-ranch:client:checkProducts',
                 args = { animalid = animalid, animal = animal }
+            },
+            {
+                title = '─────────────────────────',
+                disabled = true
+            },
+            {
+                title = 'Breeding ('..breedingStatus..')',
+                description = 'Manage animal breeding',
+                icon = 'fa-solid fa-heart',
+                event = 'rex-ranch:client:breedingMenu',
+                args = { animalid = animalid, animal = animal, freshData = freshData },
+                arrow = true
             },
         }
     })
@@ -587,14 +643,11 @@ end)
 RegisterNetEvent('rex-ranch:client:removeAnimal', function(animalid)
     local animalKey = tostring(animalid)
     
-    -- Check both string and numeric keys
+    -- Use consistent string key lookup
     local entityToRemove = nil
     if spawnedAnimals[animalKey] and DoesEntityExist(spawnedAnimals[animalKey].spawnedAnimal) then
         entityToRemove = spawnedAnimals[animalKey].spawnedAnimal
         spawnedAnimals[animalKey] = nil
-    elseif spawnedAnimals[animalid] and DoesEntityExist(spawnedAnimals[animalid].spawnedAnimal) then
-        entityToRemove = spawnedAnimals[animalid].spawnedAnimal
-        spawnedAnimals[animalid] = nil
     end
     
     if entityToRemove then
@@ -629,13 +682,11 @@ RegisterNetEvent('rex-ranch:client:removeAnimal', function(animalid)
     
     -- Also remove from follow states and transport states
     followStates[animalKey] = nil
-    followStates[animalid] = nil
     transportingAnimals[animalKey] = nil
-    transportingAnimals[animalid] = nil
     
     -- Remove from cache
     for i, cachedAnimal in ipairs(animalDataCache) do
-        if cachedAnimal.animalid == animalid or cachedAnimal.animalid == animalKey then
+        if tostring(cachedAnimal.animalid) == animalKey then
             table.remove(animalDataCache, i)
             break
         end
@@ -648,10 +699,12 @@ end)
 RegisterNetEvent('rex-ranch:client:setAnimalTransporting', function(animalIds, transporting)
     if type(animalIds) == 'table' then
         for _, animalId in ipairs(animalIds) do
-            transportingAnimals[animalId] = transporting or nil
+            local key = tostring(animalId)
+            transportingAnimals[key] = transporting or nil
         end
     else
-        transportingAnimals[animalIds] = transporting or nil
+        local key = tostring(animalIds)
+        transportingAnimals[key] = transporting or nil
     end
     
     if Config.Debug then
@@ -685,14 +738,7 @@ function GetAnimalEntityById(animalId)
         return spawnedAnimals[key].spawnedAnimal
     end
     
-    -- Try numeric key as fallback
-    local numKey = tonumber(animalId)
-    if numKey and spawnedAnimals[numKey] and DoesEntityExist(spawnedAnimals[numKey].spawnedAnimal) then
-        if Config.Debug then
-            print('^2[ANIMAL DEBUG]^7 Found entity for animal ' .. numKey .. ' (numeric key): ' .. spawnedAnimals[numKey].spawnedAnimal)
-        end
-        return spawnedAnimals[numKey].spawnedAnimal
-    end
+    -- No fallback needed - all keys should be consistent strings now
     
     if Config.Debug then
         print('^1[ANIMAL DEBUG]^7 No entity found for animal ID: ' .. key)
@@ -703,6 +749,223 @@ end
 -- Export functions for other modules
 exports('GetAnimalEntityById', GetAnimalEntityById)
 exports('GetAnimalDataCache', function() return animalDataCache end)
+
+---------------------------------------------
+-- breeding menu
+---------------------------------------------
+RegisterNetEvent('rex-ranch:client:breedingMenu', function(data)
+    local animalid = data.animalid
+    local animal = data.animal
+    local freshData = data.freshData
+    
+    if not Config.BreedingEnabled then
+        lib.notify({ title = 'Breeding Disabled', description = 'Animal breeding is currently disabled!', type = 'error' })
+        return
+    end
+    
+    -- Get fresh data from cache in case it was updated
+    freshData = getFreshAnimalData(animalid) or freshData
+    
+    -- Use database age field (calculated server-side)
+    local actualAge = freshData.age or 0
+    local genderText = freshData.gender and freshData.gender:gsub("^%l", string.upper) or 'Unknown'
+    
+    -- Check breeding requirements
+    local canBreed = true
+    local breedingIssues = {}
+    
+    if Config.MinAgeForBreeding and actualAge < Config.MinAgeForBreeding then
+        canBreed = false
+        table.insert(breedingIssues, 'Too young (need ' .. Config.MinAgeForBreeding .. ' days)')
+    elseif Config.MaxBreedingAge and actualAge > Config.MaxBreedingAge then
+        canBreed = false
+        table.insert(breedingIssues, 'Too old (max ' .. Config.MaxBreedingAge .. ' days)')
+    end
+    
+    if Config.RequireHealthForBreeding and (freshData.health or 100) < Config.RequireHealthForBreeding then
+        canBreed = false
+        table.insert(breedingIssues, 'Health too low (need ' .. Config.RequireHealthForBreeding .. '%)')
+    end
+    
+    if Config.RequireHungerForBreeding and (freshData.hunger or 100) < Config.RequireHungerForBreeding then
+        canBreed = false
+        table.insert(breedingIssues, 'Hunger too low (need ' .. Config.RequireHungerForBreeding .. '%)')
+    end
+    
+    if Config.RequireThirstForBreeding and (freshData.thirst or 100) < Config.RequireThirstForBreeding then
+        canBreed = false
+        table.insert(breedingIssues, 'Thirst too low (need ' .. Config.RequireThirstForBreeding .. '%)')
+    end
+    
+    if freshData.breeding_ready_time and freshData.breeding_ready_time > 0 then
+        canBreed = false
+        table.insert(breedingIssues, 'Breeding cooldown active')
+    end
+    
+    if freshData.gender == 'female' and freshData.pregnant == 1 then
+        canBreed = false
+        table.insert(breedingIssues, 'Already pregnant')
+    end
+    
+    local statusText = canBreed and 'Ready to breed' or table.concat(breedingIssues, ', ')
+    local gestationText = ''
+    
+    if freshData.gender == 'female' and freshData.pregnant == 1 then
+        if freshData.gestation_end_time and freshData.gestation_end_time > 0 then
+            gestationText = 'Pregnancy in progress'
+        else
+            gestationText = 'Ready to give birth!'
+        end
+    end
+    
+    local options = {
+        {
+            title = 'Breeding Information',
+            description = 'Animal breeding details',
+            icon = 'fa-solid fa-info-circle',
+            disabled = false
+        },
+        {
+            title = 'Gender: ' .. genderText,
+            description = 'Age: ' .. actualAge .. ' days',
+            icon = freshData.gender == 'male' and 'fa-solid fa-mars' or 'fa-solid fa-venus',
+            disabled = false
+        },
+        {
+            title = 'Status: ' .. statusText,
+            description = canBreed and 'This animal can breed' or 'Requirements not met',
+            icon = canBreed and 'fa-solid fa-check-circle' or 'fa-solid fa-exclamation-triangle',
+            disabled = false
+        }
+    }
+    
+    if freshData.gender == 'female' and freshData.pregnant == 1 then
+        table.insert(options, {
+            title = 'Pregnancy: ' .. gestationText,
+            description = 'This animal is expecting offspring',
+            icon = 'fa-solid fa-baby',
+            disabled = false
+        })
+    end
+    
+    if canBreed and freshData.gender then
+        table.insert(options, {
+            title = '─────────────────────────',
+            disabled = true
+        })
+        table.insert(options, {
+            title = 'Find Breeding Partner',
+            description = 'Look for compatible animals to breed with',
+            icon = 'fa-solid fa-search',
+            event = 'rex-ranch:client:findBreedingPartner',
+            args = { animalid = animalid, animal = animal, freshData = freshData }
+        })
+    end
+    
+    lib.registerContext({
+        id = 'animal_breeding_menu',
+        title = 'Animal Breeding',
+        menu = 'animal_action_menu',
+        options = options
+    })
+    lib.showContext('animal_breeding_menu')
+end)
+
+---------------------------------------------
+-- find breeding partner
+---------------------------------------------
+RegisterNetEvent('rex-ranch:client:findBreedingPartner', function(data)
+    local animalid = data.animalid
+    local PlayerData = RSGCore.Functions.GetPlayerData()
+    local ranchid = PlayerData.job.name
+    
+    RSGCore.Functions.TriggerCallback('rex-ranch:server:getAvailableAnimalsForBreeding', function(availableAnimals)
+        if not availableAnimals or #availableAnimals == 0 then
+            lib.notify({ 
+                title = 'No Partners Available', 
+                description = 'No compatible breeding partners found!', 
+                type = 'info' 
+            })
+            return
+        end
+        
+        local options = {
+            {
+                title = 'Available Breeding Partners',
+                description = #availableAnimals .. ' animals found',
+                icon = 'fa-solid fa-list',
+                disabled = false
+            },
+            {
+                title = '─────────────────────────',
+                disabled = true
+            }
+        }
+        
+        for _, partner in ipairs(availableAnimals) do
+            local genderIcon = partner.gender == 'male' and 'fa-solid fa-mars' or 'fa-solid fa-venus'
+            local statusIcon = partner.canBreed and 'fa-solid fa-check' or 'fa-solid fa-times'
+            local statusColor = partner.canBreed and 'green' or 'red'
+            
+            local healthStatus = partner.health > 80 and 'Excellent' or partner.health > 50 and 'Good' or 'Poor'
+            local description = 'Age: ' .. partner.age .. ' days, Health: ' .. healthStatus .. ' (' .. math.floor(partner.health) .. '%)\n'
+            description = description .. 'Distance: ' .. partner.distance .. 'm'
+            
+            if not partner.canBreed then
+                description = description .. '\nIssue: ' .. partner.breedingIssue
+            end
+            
+            table.insert(options, {
+                title = partner.gender:gsub("^%l", string.upper) .. ' #' .. partner.animalid,
+                description = description,
+                icon = genderIcon,
+                metadata = {
+                    { label = 'Status', value = partner.canBreed and 'Ready' or 'Not Ready' },
+                    { label = 'Health', value = math.floor(partner.health) .. '%' },
+                    { label = 'Distance', value = partner.distance .. 'm' }
+                },
+                disabled = not partner.canBreed,
+                event = partner.canBreed and 'rex-ranch:client:confirmBreeding' or nil,
+                args = partner.canBreed and { 
+                    animal1id = animalid, 
+                    animal2id = partner.animalid,
+                    partner = partner
+                } or nil
+            })
+        end
+        
+        lib.registerContext({
+            id = 'breeding_partner_menu',
+            title = 'Select Breeding Partner',
+            menu = 'animal_breeding_menu',
+            options = options
+        })
+        lib.showContext('breeding_partner_menu')
+        
+    end, ranchid, animalid)
+end)
+
+---------------------------------------------
+-- confirm breeding
+---------------------------------------------
+RegisterNetEvent('rex-ranch:client:confirmBreeding', function(data)
+    local animal1id = data.animal1id
+    local animal2id = data.animal2id
+    local partner = data.partner
+    
+    local alert = lib.alertDialog({
+        header = 'Confirm Breeding',
+        content = 'Are you sure you want to breed these animals?\n\n' ..
+                 'Animal #' .. animal1id .. ' with Animal #' .. animal2id .. '\n\n' ..
+                 'Both animals will have a breeding cooldown afterward.',
+        centered = true,
+        cancel = true
+    })
+    
+    if alert == 'confirm' then
+        TriggerServerEvent('rex-ranch:server:startBreeding', animal1id, animal2id)
+    end
+end)
 
 ---------------------------------
 -- cleanup

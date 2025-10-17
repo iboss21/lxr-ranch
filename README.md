@@ -105,6 +105,7 @@ Edit `shared/config.lua` to customize:
 Config.Debug = false -- Enable debug mode for troubleshooting
 Config.MaxRanchAnimals = 10 -- Maximum animals per ranch
 Config.AnimalCronJob = '0 * * * *' -- Stat decay frequency (every hour)
+Config.BuyPointSpawnDistance = 8.0 -- Distance from buy point where animals spawn
 ```
 
 ### Ranch Locations
@@ -150,12 +151,12 @@ Configure animal production in `Config.AnimalProducts`:
 ### For Players
 1. **Get Ranch Job**: Obtain a ranch job from an admin or through your server's job system
 2. **Visit Your Ranch**: Go to your assigned ranch location (marked with blips)
-3. **Buy Animals**: Visit livestock dealers to purchase animals
+3. **Buy Animals**: Visit livestock dealers to purchase animals (delivered near the dealer for pickup)
 4. **Manage Animals**: 
    - Feed animals with `animal_feed`
    - Water animals with `water_bucket`
    - Check animal stats through interaction menus
-5. **Herding**: Use the herding system to move animals around your ranch
+5. **Herding**: Use the herding system to move animals from buy points to your ranch or around your ranch
 6. **Sell Animals**: Take animals to livestock markets to sell them
 7. **Collect Products**: Interact with animals to collect their products
 
