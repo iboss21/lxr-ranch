@@ -7,11 +7,18 @@ CREATE TABLE IF NOT EXISTS `rex_ranch_animals` (
   `pos_y` float NOT NULL,
   `pos_z` float NOT NULL,
   `pos_w` float NOT NULL,
-  `age` int(11) DEFAULT 0,
-  `health` int(11) DEFAULT 100,
-  `thirst` int(11) DEFAULT 100,
-  `hunger` int(11) DEFAULT 100,
-  `born` INT UNSIGNED NOT NULL,
-  `scale` float DEFAULT 0.5,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `age` smallint(5) unsigned DEFAULT 0,
+  `health` tinyint(3) unsigned DEFAULT 100,
+  `thirst` tinyint(3) unsigned DEFAULT 100,
+  `hunger` tinyint(3) unsigned DEFAULT 100,
+  `born` int(10) unsigned NOT NULL,
+  `scale` decimal(3,2) DEFAULT 0.50,
+  `last_production` int(10) unsigned DEFAULT 0,
+  `product_ready` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_animalid` (`animalid`),
+  KEY `idx_ranchid` (`ranchid`),
+  KEY `idx_animalid` (`animalid`),
+  KEY `idx_product_ready` (`product_ready`),
+  KEY `idx_ranchid_product` (`ranchid`,`product_ready`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;

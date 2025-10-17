@@ -12,13 +12,17 @@ CreateThread(function()
                 spawnedPeds[k] = { spawnedPed = spawnedPed }
             end
             if distance >= Config.DistanceSpawn and spawnedPeds[k] then
-                if Config.FadeIn then
-                    for i = 255, 0, -51 do
-                        Wait(50)
-                        SetEntityAlpha(spawnedPeds[k].spawnedPed, i, false)
+                if DoesEntityExist(spawnedPeds[k].spawnedPed) then
+                    if Config.FadeIn then
+                        for i = 255, 0, -51 do
+                            Wait(50)
+                            if DoesEntityExist(spawnedPeds[k].spawnedPed) then
+                                SetEntityAlpha(spawnedPeds[k].spawnedPed, i, false)
+                            end
+                        end
                     end
+                    DeletePed(spawnedPeds[k].spawnedPed)
                 end
-                DeletePed(spawnedPeds[k].spawnedPed)
                 spawnedPeds[k] = nil
             end
         end
@@ -65,7 +69,9 @@ end
 AddEventHandler("onResourceStop", function(resourceName)
     if GetCurrentResourceName() ~= resourceName then return end
     for k,v in pairs(spawnedPeds) do
-        DeletePed(spawnedPeds[k].spawnedPed)
+        if DoesEntityExist(spawnedPeds[k].spawnedPed) then
+            DeletePed(spawnedPeds[k].spawnedPed)
+        end
         spawnedPeds[k] = nil
     end
 end)
