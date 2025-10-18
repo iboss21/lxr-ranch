@@ -595,6 +595,7 @@ end)
 ---------------------------------------------
 local lastCronRun = 0
 local cronFailures = 0
+local MAX_FAILURES = 3 -- Threshold for critical alerts or recovery actions
 
 CreateThread(function()
     while true do
@@ -602,16 +603,29 @@ CreateThread(function()
         local currentTime = os.time()
         local timeSinceLastRun = currentTime - lastCronRun
         
-        -- If it's been more than twice the cron interval since last run, something's wrong
-        local expectedInterval = 60 -- 1 minute for testing schedule
-        if Config.AnimalCronJob == '0 * * * *' then
+        -- Determine expected interval based on cron configuration
+        local expectedInterval = 15 -- Default for testing (15 seconds)
+        if Config.AnimalCronJob == '*/15 * * * *' then
+            expectedInterval = 900 -- 15 minutes for production
+        elseif Config.AnimalCronJob == '0 * * * *' then
             expectedInterval = 3600 -- 1 hour for production
         end
         
+        -- Check for missed runs
         if lastCronRun > 0 and timeSinceLastRun > (expectedInterval * 2) then
+            cronFailures = cronFailures + 1
             print('^1[REX-RANCH WARNING]^7 Animal survival cronjob has not run in ' .. math.floor(timeSinceLastRun / 60) .. ' minutes!')
             print('^1[REX-RANCH WARNING]^7 Last successful run: ' .. os.date('%Y-%m-%d %H:%M:%S', lastCronRun))
             print('^1[REX-RANCH WARNING]^7 Use /testanimalsurvival to manually trigger survival logic')
+            
+            -- Optional: Trigger critical alert or recovery after repeated failures
+            if cronFailures >= MAX_FAILURES then
+                print('^1[REX-RANCH CRITICAL]^7 Cronjob has failed ' .. cronFailures .. ' times! Consider restarting the system or notifying an admin.')
+                -- Example: Trigger a server event or notification
+                -- TriggerEvent('rex-ranch:notifyAdmins', 'Animal survival cronjob failure detected!')
+            end
+        else
+            cronFailures = 0 -- Reset failure count if cronjob is running as expected
         end
     end
 end)
