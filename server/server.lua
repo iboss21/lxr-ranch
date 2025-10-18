@@ -192,9 +192,27 @@ RegisterNetEvent('rex-ranch:server:feedAnimal', function(data)
         return
     end
     
+    -- First verify animal exists and get current stats for debugging
+    local animalData = MySQL.query.await('SELECT animalid, hunger, health, thirst FROM rex_ranch_animals WHERE animalid = ?', {animalid})
+    if not animalData or #animalData == 0 then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Animal not found!'})
+        if Config.Debug then
+            print('^1[DEBUG]^7 Player ' .. src .. ' tried to feed non-existent animal ' .. animalid)
+        end
+        return
+    end
+    
+    local animal = animalData[1]
+    if Config.Debug then
+        print('^3[DEBUG]^7 Feeding animal ' .. animalid .. ' - Current hunger: ' .. (animal.hunger or 'null') .. ', health: ' .. (animal.health or 'null') .. ', thirst: ' .. (animal.thirst or 'null'))
+    end
+    
     -- Update animal hunger
-    local success = MySQL.update.await('UPDATE rex_ranch_animals SET hunger = 100 WHERE animalid = ?', {animalid})
-    if success and success > 0 then
+    local updateSuccess, updateError = pcall(function()
+        return MySQL.update.await('UPDATE rex_ranch_animals SET hunger = 100 WHERE animalid = ?', {animalid})
+    end)
+    
+    if updateSuccess and updateError and updateError > 0 then
         Player.Functions.RemoveItem(Config.FeedItem, 1)
         if RSGCore.Shared.Items[Config.FeedItem] then
             TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[Config.FeedItem], 'remove', 1)
@@ -206,10 +224,13 @@ RegisterNetEvent('rex-ranch:server:feedAnimal', function(data)
         
         TriggerEvent('rex-ranch:server:refreshAnimals')
         if Config.Debug then
-            print('^2[DEBUG]^7 Player ' .. src .. ' fed animal ' .. animalid)
+            print('^2[DEBUG]^7 Player ' .. src .. ' successfully fed animal ' .. animalid .. ' (updated ' .. updateError .. ' rows)')
         end
     else
-        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Animal not found!'})
+        if Config.Debug then
+            print('^1[ERROR]^7 Failed to update hunger for animal ' .. animalid .. ' - Success: ' .. tostring(updateSuccess) .. ', Rows affected: ' .. tostring(updateError))
+        end
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to feed animal! Please try again.'})
     end
 end)
 
@@ -239,9 +260,27 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
         return
     end
     
+    -- First verify animal exists and get current stats for debugging
+    local animalData = MySQL.query.await('SELECT animalid, thirst, health, hunger FROM rex_ranch_animals WHERE animalid = ?', {animalid})
+    if not animalData or #animalData == 0 then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Animal not found!'})
+        if Config.Debug then
+            print('^1[DEBUG]^7 Player ' .. src .. ' tried to water non-existent animal ' .. animalid)
+        end
+        return
+    end
+    
+    local animal = animalData[1]
+    if Config.Debug then
+        print('^3[DEBUG]^7 Watering animal ' .. animalid .. ' - Current thirst: ' .. (animal.thirst or 'null') .. ', health: ' .. (animal.health or 'null') .. ', hunger: ' .. (animal.hunger or 'null'))
+    end
+    
     -- Update animal thirst
-    local success = MySQL.update.await('UPDATE rex_ranch_animals SET thirst = 100 WHERE animalid = ?', {animalid})
-    if success and success > 0 then
+    local updateSuccess, updateError = pcall(function()
+        return MySQL.update.await('UPDATE rex_ranch_animals SET thirst = 100 WHERE animalid = ?', {animalid})
+    end)
+    
+    if updateSuccess and updateError and updateError > 0 then
         Player.Functions.RemoveItem(Config.WaterItem, 1)
         if RSGCore.Shared.Items[Config.WaterItem] then
             TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[Config.WaterItem], 'remove', 1)
@@ -253,10 +292,13 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
         
         TriggerEvent('rex-ranch:server:refreshAnimals')
         if Config.Debug then
-            print('^2[DEBUG]^7 Player ' .. src .. ' watered animal ' .. animalid)
+            print('^2[DEBUG]^7 Player ' .. src .. ' successfully watered animal ' .. animalid .. ' (updated ' .. updateError .. ' rows)')
         end
     else
-        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Animal not found!'})
+        if Config.Debug then
+            print('^1[ERROR]^7 Failed to update thirst for animal ' .. animalid .. ' - Success: ' .. tostring(updateSuccess) .. ', Rows affected: ' .. tostring(updateError))
+        end
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to water animal! Please try again.'})
     end
 end)
 
@@ -522,16 +564,76 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalProductionStatus', f
 end)
 
 ---------------------------------------------
--- animal cron system
+-- animal cron functions
 ---------------------------------------------
-lib.cron.new(Config.AnimalCronJob, function()
-    MySQL.query('SELECT animalid, model, born, health, thirst, hunger, last_production, product_ready, gender, pregnant, gestation_end_time, ranchid, pos_x, pos_y, pos_z, pos_w FROM rex_ranch_animals', {}, function(animals)
-        if not animals or #animals == 0 then
-            if Config.Debug then
-                print('^1[ERROR]^7 No animals found in database or query failed.')
-            end
-            return
+-- Initialize cron job with better error handling
+CreateThread(function()
+    -- Wait for server to be fully loaded
+    Wait(5000)
+    
+    if not lib or not lib.cron then
+        print('^1[REX-RANCH ERROR]^7 ox_lib cron not available! Make sure ox_lib is started before rex-ranch.')
+        return
+    end
+    
+    print('^2[REX-RANCH]^7 Initializing animal survival cronjob with schedule: ' .. Config.AnimalCronJob)
+    
+    lib.cron.new(Config.AnimalCronJob, function ()
+        if Config.Debug then
+            print('^2[REX-RANCH CRON]^7 Starting animal update cycle at ' .. os.date('%Y-%m-%d %H:%M:%S'))
         end
+        
+        -- Run in separate thread to avoid blocking cron
+        CreateThread(function()
+            ProcessAnimalSurvival()
+        end)
+    end)
+end)
+
+---------------------------------------------
+-- Cronjob heartbeat monitoring
+---------------------------------------------
+local lastCronRun = 0
+local cronFailures = 0
+
+CreateThread(function()
+    while true do
+        Wait(300000) -- Check every 5 minutes
+        local currentTime = os.time()
+        local timeSinceLastRun = currentTime - lastCronRun
+        
+        -- If it's been more than twice the cron interval since last run, something's wrong
+        local expectedInterval = 60 -- 1 minute for testing schedule
+        if Config.AnimalCronJob == '0 * * * *' then
+            expectedInterval = 3600 -- 1 hour for production
+        end
+        
+        if lastCronRun > 0 and timeSinceLastRun > (expectedInterval * 2) then
+            print('^1[REX-RANCH WARNING]^7 Animal survival cronjob has not run in ' .. math.floor(timeSinceLastRun / 60) .. ' minutes!')
+            print('^1[REX-RANCH WARNING]^7 Last successful run: ' .. os.date('%Y-%m-%d %H:%M:%S', lastCronRun))
+            print('^1[REX-RANCH WARNING]^7 Use /testanimalsurvival to manually trigger survival logic')
+        end
+    end
+end)
+
+---------------------------------------------
+-- Non-blocking animal survival processing
+---------------------------------------------
+function ProcessAnimalSurvival()
+    lastCronRun = os.time() -- Update heartbeat
+    
+    local success, cronError = pcall(function()
+        MySQL.query('SELECT animalid, model, born, health, thirst, hunger, last_production, product_ready, gender, pregnant, gestation_end_time, ranchid, pos_x, pos_y, pos_z, pos_w FROM rex_ranch_animals', {}, function(animals)
+            if not animals or #animals == 0 then
+                if Config.Debug then
+                    print('^3[REX-RANCH CRON]^7 No animals found in database or query returned empty')
+                end
+                return
+            end
+            
+            if Config.Debug then
+                print('^2[REX-RANCH CRON]^7 Processing ' .. #animals .. ' animals')
+            end
 
         local scaleTable = {
             [0] = 0.50,
@@ -609,8 +711,8 @@ lib.cron.new(Config.AnimalCronJob, function()
                                 offspringModel = 'a_c_cow'  -- Bulls can't give birth, but if somehow they did, offspring would be cows
                             end
                             
-                            -- Insert offspring into database with error handling
-                            local insertSuccess = MySQL.insert.await('INSERT INTO rex_ranch_animals (ranchid, animalid, model, pos_x, pos_y, pos_z, pos_w, health, hunger, thirst, scale, age, born, gender, pregnant, breeding_ready_time, mother_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
+                            -- Insert offspring into database with error handling (non-blocking)
+                            MySQL.insert('INSERT INTO rex_ranch_animals (ranchid, animalid, model, pos_x, pos_y, pos_z, pos_w, health, hunger, thirst, scale, age, born, gender, pregnant, breeding_ready_time, mother_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
                                 animal.ranchid,
                                 offspringId,
                                 offspringModel,
@@ -628,19 +730,49 @@ lib.cron.new(Config.AnimalCronJob, function()
                                 0,   -- not pregnant
                                 0,   -- can breed when old enough
                                 animal.animalid -- mother_id
-                            })
-                            
-                            if not insertSuccess then
-                                if Config.Debug then
-                                    print('^1[BREEDING ERROR]^7 Failed to insert offspring ' .. offspringId .. ' for mother ' .. animal.animalid)
+                            }, function(insertResult)
+                                -- insertResult can be a table with insertId or a number
+                                local success = false
+                                if type(insertResult) == 'table' then
+                                    success = insertResult.insertId ~= nil or insertResult.affectedRows > 0
+                                elseif type(insertResult) == 'number' then
+                                    success = insertResult > 0
                                 end
-                            end
+                                
+                                if not success then
+                                    if Config.Debug then
+                                        print('^1[BREEDING ERROR]^7 Failed to insert offspring ' .. offspringId .. ' for mother ' .. animal.animalid)
+                                    end
+                                else
+                                    if Config.Debug then
+                                        print('^2[BREEDING SUCCESS]^7 Successfully inserted offspring ' .. offspringId .. ' for mother ' .. animal.animalid)
+                                    end
+                                end
+                            end)
                             
                             ::skipOffspring::
                         end
                         
                         -- Reset mother's pregnancy status
-                        MySQL.update('UPDATE rex_ranch_animals SET pregnant = 0, gestation_end_time = NULL WHERE animalid = ?', {animal.animalid})
+                        MySQL.update('UPDATE rex_ranch_animals SET pregnant = 0, gestation_end_time = NULL WHERE animalid = ?', {animal.animalid}, function(updateResult)
+                            -- updateResult can be a table with affectedRows or a number
+                            local rowsAffected = 0
+                            if type(updateResult) == 'table' then
+                                rowsAffected = updateResult.affectedRows or updateResult.changedRows or 0
+                            elseif type(updateResult) == 'number' then
+                                rowsAffected = updateResult
+                            end
+                            
+                            if rowsAffected > 0 then
+                                -- Update client-side pregnancy data
+                                if Config.UpdateClientsOnCron then
+                                    TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', -1, animal.animalid, {
+                                        pregnant = 0,
+                                        gestation_end_time = nil
+                                    })
+                                end
+                            end
+                        end)
                         
                         if Config.Debug then
                             print('^2[BREEDING]^7 Animal ' .. animal.animalid .. ' gave birth to ' .. offspringCount .. ' offspring')
@@ -649,6 +781,11 @@ lib.cron.new(Config.AnimalCronJob, function()
                         if Config.ServerNotify then
                             print('^2[REX-RANCH BREEDING]^7 ' .. offspringCount .. ' new ' .. animal.model .. '(s) born at ranch ' .. animal.ranchid)
                         end
+                        
+                        -- Refresh animals after breeding to show new offspring
+                        SetTimeout(2000, function()
+                            TriggerEvent('rex-ranch:server:refreshAnimals')
+                        end)
                         end)
                         
                         if not success then
@@ -674,19 +811,35 @@ lib.cron.new(Config.AnimalCronJob, function()
                     
                     -- Check if enough time has passed for production
                     if (currentTime - lastProduction) >= productConfig.productionTime then
-                        local updateSuccess = MySQL.update.await('UPDATE rex_ranch_animals SET last_production = ?, product_ready = 1 WHERE animalid = ?', {
+                        MySQL.update('UPDATE rex_ranch_animals SET last_production = ?, product_ready = 1 WHERE animalid = ?', {
                             currentTime, animal.animalid
-                        })
-                        
-                        if not updateSuccess then
-                            if Config.Debug then
-                                print('^1[PRODUCTION ERROR]^7 Failed to update production status for animal ' .. animal.animalid)
+                        }, function(updateResult)
+                            -- updateResult can be a table with affectedRows or a number
+                            local rowsAffected = 0
+                            if type(updateResult) == 'table' then
+                                rowsAffected = updateResult.affectedRows or updateResult.changedRows or 0
+                            elseif type(updateResult) == 'number' then
+                                rowsAffected = updateResult
                             end
-                        end
-                        
-                        if Config.Debug then
-                            print('^2[DEBUG]^7 Animal ' .. animal.animalid .. ' (' .. animal.model .. ') produced ' .. productConfig.product)
-                        end
+                            
+                            if rowsAffected > 0 then
+                                if Config.Debug then
+                                    print('^2[DEBUG]^7 Animal ' .. animal.animalid .. ' (' .. animal.model .. ') produced ' .. productConfig.product)
+                                end
+                                
+                                -- Update client-side production data
+                                if Config.UpdateClientsOnCron then
+                                    TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', -1, animal.animalid, {
+                                        last_production = currentTime,
+                                        product_ready = 1
+                                    })
+                                end
+                            else
+                                if Config.Debug then
+                                    print('^1[PRODUCTION ERROR]^7 Failed to update production status for animal ' .. animal.animalid)
+                                end
+                            end
+                        end)
                     end
                 end
             end
@@ -728,89 +881,65 @@ lib.cron.new(Config.AnimalCronJob, function()
             ::continue::
         end
         
-        -- Process batch updates for living animals
+        -- Process batch updates for living animals using individual updates for reliability
         if #batchUpdates > 0 then
-            for i = 1, #batchUpdates, 50 do -- Process in smaller chunks for better performance
-                local chunk = {}
-                for j = i, math.min(i + 49, #batchUpdates) do
-                    table.insert(chunk, batchUpdates[j])
+            local updateSuccess = 0
+            local updateFailed = 0
+            
+            for _, update in ipairs(batchUpdates) do
+                -- Validate update data
+                if not update.animalid then
+                    if Config.Debug then
+                        print('^1[ERROR]^7 Skipping update with missing animalid')
+                    end
+                    updateFailed = updateFailed + 1
+                    goto continue_update
                 end
                 
-                -- Validate chunk is not empty
-                if #chunk == 0 then
-                    goto continue_batch
-                end
-                
-                -- Use safer batch update with prepared parameters
-                local hungerCases = {}
-                local thirstCases = {}
-                local healthCases = {}
-                local scaleCases = {}
-                local animalIds = {}
-                local params = {}
-                
-                for idx, update in ipairs(chunk) do
-                    -- Validate update data
-                    if not update.animalid then
-                        goto continue_update
+                -- Use individual updates for better reliability (non-blocking)
+                MySQL.update('UPDATE rex_ranch_animals SET hunger = ?, thirst = ?, health = ?, scale = ? WHERE animalid = ?', {
+                    update.hunger or 0,
+                    update.thirst or 0,
+                    update.health or 0,
+                    update.scale or 1.00,
+                    update.animalid
+                }, function(result)
+                    -- result can be a table with affectedRows or a number
+                    local rowsAffected = 0
+                    if type(result) == 'table' then
+                        rowsAffected = result.affectedRows or result.changedRows or 0
+                    elseif type(result) == 'number' then
+                        rowsAffected = result
                     end
                     
-                    table.insert(hungerCases, 'WHEN animalid = ? THEN ?')
-                    table.insert(thirstCases, 'WHEN animalid = ? THEN ?')
-                    table.insert(healthCases, 'WHEN animalid = ? THEN ?')
-                    table.insert(scaleCases, 'WHEN animalid = ? THEN ?')
-                    table.insert(animalIds, '?')
-                    
-                    -- Add parameters in correct order
-                    table.insert(params, update.animalid) -- for hunger WHEN
-                    table.insert(params, update.hunger or 0)  -- for hunger THEN
-                    table.insert(params, update.animalid) -- for thirst WHEN
-                    table.insert(params, update.thirst or 0)  -- for thirst THEN
-                    table.insert(params, update.animalid) -- for health WHEN
-                    table.insert(params, update.health or 0)  -- for health THEN
-                    table.insert(params, update.animalid) -- for scale WHEN
-                    table.insert(params, update.scale or 1.00)  -- for scale THEN
-                    
-                    ::continue_update::
-                end
-                
-                -- Only execute if we have valid updates
-                if #hungerCases > 0 then
-                    -- Add IN clause parameters
-                    for _, update in ipairs(chunk) do
-                        if update.animalid then
-                            table.insert(params, update.animalid)
+                    if rowsAffected > 0 then
+                        updateSuccess = updateSuccess + 1
+                        if Config.Debug then
+                            print('^2[DEBUG]^7 Updated animal ' .. update.animalid .. ' - Hunger: ' .. (update.hunger or 0) .. ', Thirst: ' .. (update.thirst or 0) .. ', Health: ' .. (update.health or 0))
+                        end
+                        
+                        -- Update client-side data for this specific animal
+                        if Config.UpdateClientsOnCron then
+                            TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', -1, update.animalid, {
+                                hunger = update.hunger,
+                                thirst = update.thirst,
+                                health = update.health,
+                                scale = update.scale
+                            })
+                        end
+                    else
+                        updateFailed = updateFailed + 1
+                        if Config.Debug then
+                            print('^1[ERROR]^7 Update returned 0 rows affected for animal ' .. update.animalid)
                         end
                     end
-                    
-                    local query = string.format(
-                        'UPDATE rex_ranch_animals SET ' ..
-                        'hunger = CASE %s END, ' ..
-                        'thirst = CASE %s END, ' ..
-                        'health = CASE %s END, ' ..
-                        'scale = CASE %s END ' ..
-                        'WHERE animalid IN (%s)',
-                        table.concat(hungerCases, ' '),
-                        table.concat(thirstCases, ' '),
-                        table.concat(healthCases, ' '),
-                        table.concat(scaleCases, ' '),
-                        table.concat(animalIds, ', ')
-                    )
-                    
-                    local success, error = pcall(function()
-                        MySQL.execute(query, params)
-                    end)
-                    
-                    if not success and Config.Debug then
-                        print('^1[ERROR]^7 Batch update failed: ' .. tostring(error))
-                    end
-                end
+                end)
                 
-                ::continue_batch::
+                ::continue_update::
             end
             
             if Config.Debug then
-                print('^2[DEBUG]^7 Processed ' .. #batchUpdates .. ' animal updates in batch')
+                print('^2[DEBUG]^7 Processed ' .. #batchUpdates .. ' animal updates: ' .. updateSuccess .. ' successful, ' .. updateFailed .. ' failed')
             end
         end
         
@@ -819,22 +948,290 @@ lib.cron.new(Config.AnimalCronJob, function()
         MySQL.execute('UPDATE rex_ranch_animals SET breeding_ready_time = 0 WHERE breeding_ready_time > 0 AND breeding_ready_time <= ?', {currentTime})
         
         -- Remove dead animals from database and client
-        for _, animalid in ipairs(animalsToRemove) do
-            MySQL.execute('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animalid})
-            -- Remove the animal entity from all clients
-            TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animalid)
-        end
-        
-        -- Refresh animals on client if any were removed
         if #animalsToRemove > 0 then
-            TriggerEvent('rex-ranch:server:refreshAnimals')
+            if Config.Debug then
+                print('^1[REX-RANCH]^7 Removing ' .. #animalsToRemove .. ' dead animals from database and game world')
+                for _, id in ipairs(animalsToRemove) do
+                    print('^1[REX-RANCH DEBUG]^7 Dead animal ID: ' .. tostring(id))
+                end
+            end
+            
+            -- Immediately remove animals from clients (don't wait for database)
+            for _, animalid in ipairs(animalsToRemove) do
+                if Config.Debug then
+                    print('^1[REX-RANCH]^7 Immediately removing animal ' .. animalid .. ' from all clients')
+                end
+                TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animalid)
+            end
+            
+            -- Then remove from database
+            for _, animalid in ipairs(animalsToRemove) do
+                MySQL.execute('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(deleteResult)
+                    -- deleteResult can be a table with affectedRows or a number
+                    local rowsAffected = 0
+                    if type(deleteResult) == 'table' then
+                        rowsAffected = deleteResult.affectedRows or deleteResult.changedRows or 0
+                    elseif type(deleteResult) == 'number' then
+                        rowsAffected = deleteResult
+                    end
+                    
+                    if rowsAffected > 0 then
+                        if Config.Debug then
+                            print('^2[REX-RANCH]^7 Successfully removed animal ' .. animalid .. ' from database')
+                        end
+                    else
+                        if Config.Debug then
+                            print('^1[REX-RANCH ERROR]^7 Failed to remove animal ' .. animalid .. ' from database')
+                        end
+                        -- If database removal fails, we should still keep the client removal
+                        -- The animal is already gone from client, database cleanup can be retried
+                    end
+                end)
+            end
+            
+            -- Refresh animals on client after removals (delayed)
+            SetTimeout(1000, function()
+                TriggerEvent('rex-ranch:server:refreshAnimals')
+            end)
+            
+            if Config.ServerNotify then
+                print('^1[REX-RANCH]^7 Removed ' .. #animalsToRemove .. ' dead animals from the game world')
+            end
         end
         
-        if Config.ServerNotify and #animalsToRemove == 0 then
-            print('^2[REX-RANCH]^7 Animal survival check completed. ' .. #animals .. ' animals updated.')
+        -- Print completion summary
+        if Config.ServerNotify then
+            if #animalsToRemove > 0 then
+                print('^2[REX-RANCH]^7 Animal survival check completed. ' .. #animals .. ' animals processed, ' .. #animalsToRemove .. ' animals died.')
+            else
+                print('^2[REX-RANCH]^7 Animal survival check completed. ' .. #animals .. ' animals updated.')
+            end
+            
+            if #batchUpdates > 0 and Config.UpdateClientsOnCron then
+                print('^2[REX-RANCH]^7 Updated client data for ' .. #batchUpdates .. ' animals')
+            end
+        end
+        
+        if Config.Debug then
+            print('^2[REX-RANCH CRON]^7 Animal update cycle completed successfully')
+        end
+        
+        -- Refresh all animal data on clients after cronjob completion
+        -- This ensures any missed individual updates are caught
+        if Config.RefreshAfterCron then
+            SetTimeout(500, function()
+                if Config.Debug then
+                    print('^2[REX-RANCH CRON]^7 Refreshing all animal data on clients')
+                end
+                TriggerEvent('rex-ranch:server:refreshAnimals')
+            end)
+        end
+    end) -- Close MySQL.query callback
+    end) -- Close pcall function
+    
+    if not success then
+        cronFailures = cronFailures + 1
+        print('^1[REX-RANCH CRON ERROR]^7 Animal cron job failed (failure #' .. cronFailures .. '): ' .. tostring(cronError))
+        
+        -- If we have too many failures, something is seriously wrong
+        if cronFailures >= 5 then
+            print('^1[REX-RANCH CRITICAL]^7 Animal survival cronjob has failed ' .. cronFailures .. ' times!')
+            print('^1[REX-RANCH CRITICAL]^7 This may indicate a database connection issue or resource conflict.')
+        end
+    else
+        cronFailures = 0 -- Reset failure counter on success
+    end
+end
+
+---------------------------------------------
+-- Manual animal survival test command (for debugging)
+---------------------------------------------
+RegisterCommand('testanimalsurvival', function(source, args, rawCommand)
+    print('^3[REX-RANCH TEST]^7 Manual animal survival check triggered by admin')
+    
+    -- Test database connection first
+    MySQL.query('SELECT COUNT(*) as count FROM rex_ranch_animals', {}, function(result)
+        if not result or #result == 0 then
+            print('^1[REX-RANCH TEST]^7 Database query failed or returned no results')
+            return
+        end
+        
+        print('^2[REX-RANCH TEST]^7 Database connection OK. Found ' .. result[1].count .. ' animals in database')
+        
+        -- Run the animal survival logic manually
+        MySQL.query('SELECT animalid, model, born, health, thirst, hunger, last_production, product_ready, gender, pregnant, gestation_end_time, ranchid, pos_x, pos_y, pos_z, pos_w FROM rex_ranch_animals LIMIT 5', {}, function(animals)
+            if not animals or #animals == 0 then
+                print('^3[REX-RANCH TEST]^7 No animals found for testing')
+                return
+            end
+            
+            print('^2[REX-RANCH TEST]^7 Testing survival logic on ' .. #animals .. ' animals')
+            for i, animal in ipairs(animals) do
+                local animalAge = math.floor((os.time() - animal.born) / (24 * 60 * 60))
+                print('^3[REX-RANCH TEST]^7 Animal ' .. i .. ': ID=' .. animal.animalid .. ', Age=' .. animalAge .. 'd, Health=' .. (animal.health or 'NULL') .. ', Hunger=' .. (animal.hunger or 'NULL') .. ', Thirst=' .. (animal.thirst or 'NULL'))
+            end
+        end)
+    end)
+end, true) -- restricted to admins
+
+---------------------------------------------
+-- Test animal removal (for debugging)
+---------------------------------------------
+RegisterCommand('testremoval', function(source, args, rawCommand)
+    local animalid = args[1]
+    if not animalid then
+        print('^1[REX-RANCH TEST]^7 Usage: /testremoval <animalid>')
+        return
+    end
+    
+    print('^3[REX-RANCH TEST]^7 Testing removal of animal: ' .. animalid)
+    
+    -- Check if animal exists first
+    MySQL.query('SELECT animalid FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(result)
+        if not result or #result == 0 then
+            print('^1[REX-RANCH TEST]^7 Animal ' .. animalid .. ' not found in database')
+            return
+        end
+        
+        print('^2[REX-RANCH TEST]^7 Animal found in database. Testing removal...')
+        
+        -- Trigger client removal immediately
+        print('^3[REX-RANCH TEST]^7 Sending client removal event for animal ' .. animalid)
+        TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animalid)
+        
+        -- Also remove from database
+        MySQL.execute('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(deleteResult)
+            local rowsAffected = 0
+            if type(deleteResult) == 'table' then
+                rowsAffected = deleteResult.affectedRows or deleteResult.changedRows or 0
+            elseif type(deleteResult) == 'number' then
+                rowsAffected = deleteResult
+            end
+            
+            if rowsAffected > 0 then
+                print('^2[REX-RANCH TEST]^7 Successfully removed animal ' .. animalid .. ' from database')
+            else
+                print('^1[REX-RANCH TEST]^7 Failed to remove animal ' .. animalid .. ' from database')
+            end
+        end)
+        
+        -- Trigger refresh after a delay
+        SetTimeout(2000, function()
+            print('^3[REX-RANCH TEST]^7 Triggering animal refresh')
+            TriggerEvent('rex-ranch:server:refreshAnimals')
+        end)
+    end)
+end, true) -- restricted to admins
+
+---------------------------------------------
+-- Check cronjob status
+---------------------------------------------
+RegisterCommand('cronstat', function(source, args, rawCommand)
+    local currentTime = os.time()
+    local timeSinceLastRun = currentTime - lastCronRun
+    
+    print('^3[REX-RANCH CRON STATUS]^7 === Cronjob Status ===')
+    print('^3[REX-RANCH CRON STATUS]^7 Schedule: ' .. Config.AnimalCronJob)
+    print('^3[REX-RANCH CRON STATUS]^7 Debug Mode: ' .. tostring(Config.Debug))
+    print('^3[REX-RANCH CRON STATUS]^7 Failure Count: ' .. cronFailures)
+    
+    if lastCronRun == 0 then
+        print('^1[REX-RANCH CRON STATUS]^7 Status: Never run since server start')
+    else
+        print('^2[REX-RANCH CRON STATUS]^7 Last Run: ' .. os.date('%Y-%m-%d %H:%M:%S', lastCronRun))
+        print('^2[REX-RANCH CRON STATUS]^7 Minutes Since Last Run: ' .. math.floor(timeSinceLastRun / 60))
+        
+        local expectedInterval = 60 -- 1 minute for testing
+        if Config.AnimalCronJob == '0 * * * *' then
+            expectedInterval = 3600 -- 1 hour for production
+        end
+        
+        if timeSinceLastRun > (expectedInterval * 2) then
+            print('^1[REX-RANCH CRON STATUS]^7 Status: STOPPED (overdue)')
+        else
+            print('^2[REX-RANCH CRON STATUS]^7 Status: Running normally')
+        end
+    end
+    
+    print('^3[REX-RANCH CRON STATUS]^7 === End Status ===')
+end, true) -- restricted to admins
+
+---------------------------------------------
+-- Kill animal command (for testing)
+---------------------------------------------
+RegisterCommand('killanimal', function(source, args, rawCommand)
+    local animalid = args[1]
+    if not animalid then
+        print('^1[REX-RANCH TEST]^7 Usage: /killanimal <animalid>')
+        return
+    end
+    
+    print('^3[REX-RANCH TEST]^7 Setting animal health to 0: ' .. animalid)
+    
+    -- Set animal health to 0 to trigger death
+    MySQL.update('UPDATE rex_ranch_animals SET health = 0 WHERE animalid = ?', {animalid}, function(result)
+        local rowsAffected = 0
+        if type(result) == 'table' then
+            rowsAffected = result.affectedRows or result.changedRows or 0
+        elseif type(result) == 'number' then
+            rowsAffected = result
+        end
+        
+        if rowsAffected > 0 then
+            print('^2[REX-RANCH TEST]^7 Successfully set animal ' .. animalid .. ' health to 0')
+            print('^3[REX-RANCH TEST]^7 Run /testanimalsurvival to trigger death processing')
+        else
+            print('^1[REX-RANCH TEST]^7 Failed to update animal ' .. animalid .. ' or animal not found')
         end
     end)
-end)
+end, true) -- restricted to admins
+
+---------------------------------------------
+-- Manual dead animal cleanup command
+---------------------------------------------
+RegisterCommand('cleandead', function(source, args, rawCommand)
+    print('^3[REX-RANCH CLEANUP]^7 Manual dead animal cleanup triggered')
+    
+    -- Find all animals with 0 health
+    MySQL.query('SELECT animalid, health FROM rex_ranch_animals WHERE health <= 0', {}, function(deadAnimals)
+        if not deadAnimals or #deadAnimals == 0 then
+            print('^2[REX-RANCH CLEANUP]^7 No dead animals found in database')
+            return
+        end
+        
+        print('^3[REX-RANCH CLEANUP]^7 Found ' .. #deadAnimals .. ' dead animals to clean up')
+        
+        local cleanupCount = 0
+        for _, animal in ipairs(deadAnimals) do
+            -- Remove from database
+            local deleteResult = MySQL.execute.await('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animal.animalid})
+            
+            if deleteResult and deleteResult > 0 then
+                -- Remove from all clients
+                TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animal.animalid)
+                cleanupCount = cleanupCount + 1
+                print('^2[REX-RANCH CLEANUP]^7 Cleaned up dead animal: ' .. animal.animalid)
+                Wait(100) -- Small delay between removals
+            end
+        end
+        
+        if cleanupCount > 0 then
+            -- Refresh animals after cleanup
+            Wait(500)
+            TriggerEvent('rex-ranch:server:refreshAnimals')
+            print('^2[REX-RANCH CLEANUP]^7 Cleanup complete. Removed ' .. cleanupCount .. ' dead animals')
+        end
+    end)
+end, true) -- restricted to admins
+
+---------------------------------------------
+-- Force refresh all animals (removes orphaned entities)
+---------------------------------------------
+RegisterCommand('refreshanimals', function(source, args, rawCommand)
+    print('^3[REX-RANCH]^7 Force refreshing all animals for all players')
+    TriggerClientEvent('rex-ranch:client:refreshAnimals', -1)
+    TriggerEvent('rex-ranch:server:refreshAnimals')
+end, true) -- restricted to admins
 
 ---------------------------------------------
 -- Helper function to validate breeding requirements
@@ -853,8 +1250,7 @@ local function ValidateBreeding(animal1, animal2)
     local compatibleBreeding = false
     if animal1.model == animal2.model then
         compatibleBreeding = true
-    elseif (animal1.model == 'a_c_bull_01' and animal2.model == 'a_c_cow') or
-           (animal1.model == 'a_c_cow' and animal2.model == 'a_c_bull_01') then
+    elseif (animal1.model == 'a_c_bull_01' and animal2.model == 'a_c_cow') or (animal1.model == 'a_c_cow' and animal2.model == 'a_c_bull_01') then 
         compatibleBreeding = true
     end
     

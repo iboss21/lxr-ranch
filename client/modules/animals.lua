@@ -15,6 +15,34 @@ RegisterNetEvent('RSGCore:Client:OnPlayerLoaded', function()
 end)
 
 ---------------------------------------------
+-- force refresh animals from server
+---------------------------------------------
+RegisterNetEvent('rex-ranch:client:refreshAnimals', function()
+    if Config.Debug then
+        print('^3[ANIMAL DEBUG]^7 Force refresh triggered - clearing all spawned animals')
+    end
+    
+    -- Clear all currently spawned animals
+    for animalKey, animalData in pairs(spawnedAnimals) do
+        if animalData and animalData.spawnedAnimal and DoesEntityExist(animalData.spawnedAnimal) then
+            exports.ox_target:removeLocalEntity(animalData.spawnedAnimal, 'ranch_animal')
+            DeletePed(animalData.spawnedAnimal)
+            if Config.Debug then
+                print('^1[ANIMAL DEBUG]^7 Force removed animal entity: ' .. animalKey)
+            end
+        end
+    end
+    
+    -- Clear all tracking data
+    spawnedAnimals = {}
+    followStates = {}
+    spawningLocks = {}
+    
+    -- Request fresh animal data from server
+    TriggerServerEvent('rex-ranch:server:refreshAnimals')
+end)
+
+---------------------------------------------
 -- check distance, spawn animal, and track position
 ---------------------------------------------
 CreateThread(function()
@@ -893,11 +921,33 @@ end)
 RegisterNetEvent('rex-ranch:client:removeAnimal', function(animalid)
     local animalKey = tostring(animalid)
     
+    if Config.Debug then
+        print('^1[ANIMAL REMOVAL DEBUG]^7 Received removal request for animal: ' .. animalKey)
+        print('^1[ANIMAL REMOVAL DEBUG]^7 Current spawned animals count: ' .. GetTableLength(spawnedAnimals))
+    end
+    
     -- Use consistent string key lookup
     local entityToRemove = nil
-    if spawnedAnimals[animalKey] and DoesEntityExist(spawnedAnimals[animalKey].spawnedAnimal) then
-        entityToRemove = spawnedAnimals[animalKey].spawnedAnimal
+    if spawnedAnimals[animalKey] then
+        if Config.Debug then
+            print('^2[ANIMAL REMOVAL DEBUG]^7 Found animal in spawned table: ' .. animalKey)
+        end
+        
+        if DoesEntityExist(spawnedAnimals[animalKey].spawnedAnimal) then
+            entityToRemove = spawnedAnimals[animalKey].spawnedAnimal
+            if Config.Debug then
+                print('^2[ANIMAL REMOVAL DEBUG]^7 Entity exists, will remove: ' .. entityToRemove)
+            end
+        else
+            if Config.Debug then
+                print('^3[ANIMAL REMOVAL DEBUG]^7 Entity no longer exists for animal: ' .. animalKey)
+            end
+        end
         spawnedAnimals[animalKey] = nil
+    else
+        if Config.Debug then
+            print('^3[ANIMAL REMOVAL DEBUG]^7 Animal not found in spawned table: ' .. animalKey)
+        end
     end
     
     if entityToRemove then
@@ -922,11 +972,11 @@ RegisterNetEvent('rex-ranch:client:removeAnimal', function(animalid)
         end
         
         if Config.Debug then
-            print('^2[ANIMAL DEBUG]^7 Removed sold animal entity: ' .. animalid .. ' (entity: ' .. entityToRemove .. ')')
+            print('^2[ANIMAL REMOVAL DEBUG]^7 Successfully removed animal entity: ' .. animalid .. ' (entity: ' .. entityToRemove .. ')')
         end
     else
         if Config.Debug then
-            print('^1[ANIMAL DEBUG]^7 Could not find entity to remove for animal: ' .. animalid)
+            print('^1[ANIMAL REMOVAL DEBUG]^7 No entity to remove for animal: ' .. animalid)
         end
     end
     
@@ -935,11 +985,19 @@ RegisterNetEvent('rex-ranch:client:removeAnimal', function(animalid)
     transportingAnimals[animalKey] = nil
     
     -- Remove from cache
+    local removedFromCache = false
     for i, cachedAnimal in ipairs(animalDataCache) do
         if tostring(cachedAnimal.animalid) == animalKey then
             table.remove(animalDataCache, i)
+            removedFromCache = true
             break
         end
+    end
+    
+    if Config.Debug then
+        print('^2[ANIMAL REMOVAL DEBUG]^7 Removal completed for animal ' .. animalKey .. ' - Cache removed: ' .. tostring(removedFromCache))
+        print('^2[ANIMAL REMOVAL DEBUG]^7 New spawned animals count: ' .. GetTableLength(spawnedAnimals))
+        print('^2[ANIMAL REMOVAL DEBUG]^7 New cached animals count: ' .. #animalDataCache)
     end
 end)
 
@@ -999,6 +1057,68 @@ end
 -- Export functions for other modules
 exports('GetAnimalEntityById', GetAnimalEntityById)
 exports('GetAnimalDataCache', function() return animalDataCache end)
+
+---------------------------------------------
+-- Debug command to check animal entities
+---------------------------------------------
+RegisterCommand('debuganimals', function()
+    local playerCoords = GetEntityCoords(cache.ped)
+    local nearbyPeds = {}
+    local totalAnimals = 0
+    local orphanedEntities = 0
+    
+    print('^3[ANIMAL DEBUG]^7 === Animal Debug Report ===')
+    print('^3[ANIMAL DEBUG]^7 Spawned Animals Count: ' .. GetTableLength(spawnedAnimals))
+    print('^3[ANIMAL DEBUG]^7 Cached Animals Count: ' .. #animalDataCache)
+    
+    -- Check for nearby animal entities
+    for i = 1, 256 do -- Check nearby entities
+        local entity = GetClosestPed(playerCoords.x, playerCoords.y, playerCoords.z, i, false, false, 0)
+        if DoesEntityExist(entity) and entity ~= cache.ped then
+            local model = GetEntityModel(entity)
+            local modelName = ''
+            
+            -- Check if it's a known ranch animal model
+            if model == GetHashKey('a_c_bull_01') then
+                modelName = 'a_c_bull_01'
+                totalAnimals = totalAnimals + 1
+            elseif model == GetHashKey('a_c_cow') then
+                modelName = 'a_c_cow' 
+                totalAnimals = totalAnimals + 1
+            end
+            
+            if modelName ~= '' then
+                local distance = #(playerCoords - GetEntityCoords(entity))
+                local isTracked = false
+                
+                -- Check if this entity is tracked in our spawned animals
+                for _, animalData in pairs(spawnedAnimals) do
+                    if animalData.spawnedAnimal == entity then
+                        isTracked = true
+                        break
+                    end
+                end
+                
+                if not isTracked then
+                    orphanedEntities = orphanedEntities + 1
+                    print('^1[ANIMAL DEBUG]^7 Orphaned ' .. modelName .. ' entity found at distance ' .. math.floor(distance * 10) / 10 .. 'm (entity: ' .. entity .. ')')
+                else
+                    print('^2[ANIMAL DEBUG]^7 Tracked ' .. modelName .. ' entity at distance ' .. math.floor(distance * 10) / 10 .. 'm (entity: ' .. entity .. ')')
+                end
+            end
+        end
+    end
+    
+    print('^3[ANIMAL DEBUG]^7 Total Animal Entities: ' .. totalAnimals)
+    print('^1[ANIMAL DEBUG]^7 Orphaned Entities: ' .. orphanedEntities)
+    print('^3[ANIMAL DEBUG]^7 === End Debug Report ===')
+end, false)
+
+function GetTableLength(t)
+    local count = 0
+    for _ in pairs(t) do count = count + 1 end
+    return count
+end
 
 
 ---------------------------------------------

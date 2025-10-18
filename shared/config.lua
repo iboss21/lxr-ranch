@@ -30,8 +30,10 @@ Config.RanchStorageMaxSlots = 100
 Config.AnimalDistanceSpawn = 50.0
 Config.AnimalFadeIn = true
 Config.ServerNotify = true
-Config.AnimalCronJob = '0 * * * *' -- every hour
+Config.AnimalCronJob = '*/1 * * * *' -- every 5 minutes (for testing), change to '0 * * * *' for hourly
 Config.MaxRanchAnimals = 10
+Config.UpdateClientsOnCron = true -- Update client animal data when cronjob runs
+Config.RefreshAfterCron = true -- Full refresh of animal data after cronjob completion
 
 ---------------------------------
 -- animal management settings

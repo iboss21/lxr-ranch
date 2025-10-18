@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS `rex_ranch_animals` (
   `thirst` tinyint(3) unsigned DEFAULT 100,
   `hunger` tinyint(3) unsigned DEFAULT 100,
   `born` int(10) unsigned NOT NULL,
-  `scale` decimal(3,2) DEFAULT 0.50,
+  `scale` decimal(4,2) DEFAULT 0.50,
   `last_production` int(10) unsigned DEFAULT 0,
   `product_ready` tinyint(1) DEFAULT 0,
   `gender` enum('male','female') DEFAULT 'female',
