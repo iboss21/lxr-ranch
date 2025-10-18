@@ -265,7 +265,7 @@ Config.RanchLocations = {
 ---------------------------------
 Config.SalePointLocations = {
     { 
-        name = 'Livestock Market',
+        name = 'Livestock Market', -- testing Emerald Ranch
         coords = vector3(1334.46, 301.40, 87.75),
         npcmodel = `cs_valauctionboss_01`,
         npccoords = vector4(1334.46, 301.40, 87.75, 281.66),
@@ -275,25 +275,15 @@ Config.SalePointLocations = {
         showblip = true
     },
     { 
-        name = 'Livestock Market',
-        coords = vector3(-1792.34, -392.56, 160.33),
+        name = 'Livestock Market', -- near strawberry
+        coords = vector3(-1791.83, -579.00, 155.95),
         npcmodel = `cs_valauctionboss_01`,
-        npccoords = vector4(-1792.34, -392.56, 160.33, 180.0),
+        npccoords = vector4(-1791.83, -579.00, 155.95, 28.21),
         blipname = 'Livestock Market',
         blipsprite = 'blip_shop_store',
         blipscale = 0.2,
         showblip = true
     },
-    { 
-        name = 'Livestock Market',
-        coords = vector3(1225.67, -1293.45, 76.04),
-        npcmodel = `cs_valauctionboss_01`,
-        npccoords = vector4(1225.67, -1293.45, 76.04, 270.0),
-        blipname = 'Livestock Market',
-        blipsprite = 'blip_shop_store',
-        blipscale = 0.2,
-        showblip = true
-}
 }
 
 ---------------------------------
@@ -301,7 +291,7 @@ Config.SalePointLocations = {
 ---------------------------------
 Config.BuyPointLocations = {
     {
-        name = 'Livestock Dealer',
+        name = 'Livestock Dealer', -- testing
         coords = vector3(1383.58, 292.34, 88.18),
         npcmodel = `mp_u_m_m_trader_01`,
         npccoords = vector4(1383.58, 292.34, 88.18, 267.87),
@@ -312,25 +302,14 @@ Config.BuyPointLocations = {
         spawnpoint = vector4(1383.58, 292.34, 88.18, 267.87) -- Near the dealer
     },
     {
-        name = 'Livestock Dealer',
-        coords = vector3(-1792.84, -394.56, 160.33),
+        name = 'Livestock Dealer', -- near strawberry
+        coords = vector3(-1834.75, -578.28, 155.97),
         npcmodel = `mp_u_m_m_trader_01`,
-        npccoords = vector4(-1792.84, -394.56, 160.33, 90.0),
+        npccoords = vector4(-1834.75, -578.28, 155.97, 304.67),
         blipname = 'Livestock Dealer',
         blipsprite = 'blip_shop_horse',
         blipscale = 0.2,
         showblip = true,
-        spawnpoint = vector4(-1790.00, -398.00, 160.33, 180.0) -- Near the trader
-    },
-    {
-        name = 'Livestock Dealer',
-        coords = vector3(1226.67, -1295.45, 76.04),
-        npcmodel = `mp_u_m_m_trader_01`,
-        npccoords = vector4(1226.67, -1295.45, 76.04, 270.0),
-        blipname = 'Livestock Dealer',
-        blipsprite = 'blip_shop_horse',
-        blipscale = 0.2,
-        showblip = true,
-        spawnpoint = vector4(1230.00, -1298.00, 76.04, 0.0) -- Near the merchant
+        spawnpoint = vector4(-1830.77, -576.25, 155.97, 291.70) -- Near the trader
     }
 }
