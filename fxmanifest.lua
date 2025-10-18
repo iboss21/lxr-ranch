@@ -3,7 +3,7 @@ rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aw
 game 'rdr3'
 
 description 'rex-ranch'
-version '2.0.0'
+version '0.0.1'
 
 shared_scripts {
     '@ox_lib/init.lua',
@@ -18,7 +18,8 @@ client_scripts {
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
-    'server/server.lua'
+    'server/server.lua',
+    'versionchecker.lua'
 }
 
 dependencies {
