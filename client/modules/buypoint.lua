@@ -139,41 +139,7 @@ RegisterNetEvent('rex-ranch:client:openBuyMenu', function(buyPointData)
             
             -- Available animals to buy
             local availableSlots = Config.MaxRanchAnimals - animalCount
-            
-            -- Cow option
-            table.insert(options, {
-                title = '🐄 Buy Cow',
-                description = 'Price: $' .. Config.CowBuyPrice .. ' | Young cow ready for raising',
-                icon = 'fa-solid fa-dollar-sign',
-                onSelect = function()
-                    TriggerEvent('rex-ranch:client:confirmBuyAnimal', {
-                        animalType = 'a_c_cow',
-                        animalName = 'Cow',
-                        price = Config.CowBuyPrice,
-                        ranchData = playerRanchData,
-                        buyPointData = buyPointData
-                    })
-                end,
-                arrow = true
-            })
-            
-            -- Sheep option
-            table.insert(options, {
-                title = '🐑 Buy Sheep',
-                description = 'Price: $' .. Config.SheepBuyPrice .. ' | Hardy sheep for wool and meat',
-                icon = 'fa-solid fa-dollar-sign',
-                onSelect = function()
-                    TriggerEvent('rex-ranch:client:confirmBuyAnimal', {
-                        animalType = 'a_c_sheep_01',
-                        animalName = 'Sheep',
-                        price = Config.SheepBuyPrice,
-                        ranchData = playerRanchData,
-                        buyPointData = buyPointData
-                    })
-                end,
-                arrow = true
-            })
-            
+
             -- Bull option
             table.insert(options, {
                 title = '🐂 Buy Bull',
@@ -190,7 +156,24 @@ RegisterNetEvent('rex-ranch:client:openBuyMenu', function(buyPointData)
                 end,
                 arrow = true
             })
-            
+
+            -- Cow option
+            table.insert(options, {
+                title = '🐄 Buy Cow',
+                description = 'Price: $' .. Config.CowBuyPrice .. ' | Young cow ready for raising',
+                icon = 'fa-solid fa-dollar-sign',
+                onSelect = function()
+                    TriggerEvent('rex-ranch:client:confirmBuyAnimal', {
+                        animalType = 'a_c_cow',
+                        animalName = 'Cow',
+                        price = Config.CowBuyPrice,
+                        ranchData = playerRanchData,
+                        buyPointData = buyPointData
+                    })
+                end,
+                arrow = true
+            })
+
             table.insert(options, {
                 title = '─────────────────────────',
                 disabled = true
@@ -234,7 +217,7 @@ RegisterNetEvent('rex-ranch:client:confirmBuyAnimal', function(data)
     -- Show confirmation dialog
     local alert = lib.alertDialog({
         header = 'Confirm Purchase',
-        content = 'Are you sure you want to buy this ' .. data.animalName .. ' for $' .. data.price .. '?\\n\\nThe animal will be available for pickup near the ' .. data.buyPointData.name .. '.',
+        content = 'Are you sure you want to buy this ' .. data.animalName .. ' for $' .. data.price .. '? \n The animal will be available for pickup near the ' .. data.buyPointData.name .. '.',
         centered = true,
         cancel = true
     })
@@ -287,36 +270,3 @@ AddEventHandler('onResourceStop', function(resourceName)
         print('^2[BUYPOINT DEBUG]^7 All buy point NPCs and blips cleaned up')
     end
 end)
-
----------------------------------------------
--- debug commands
----------------------------------------------
-if Config.Debug then
-    RegisterCommand('cleanupbuypointnpcs', function()
-        CleanupExistingBuyPointNPCs()
-        lib.notify({ title = 'Debug', description = 'Manually cleaned up duplicate buy point NPCs', type = 'inform' })
-    end)
-    
-    RegisterCommand('testbuy', function()
-        local playerPed = PlayerPedId()
-        local coords = GetEntityCoords(playerPed)
-        
-        -- Find nearest buy point
-        local nearestBuyPoint = nil
-        local nearestDistance = math.huge
-        
-        for _, buyPointData in pairs(Config.BuyPointLocations) do
-            local distance = #(coords - buyPointData.coords)
-            if distance < nearestDistance then
-                nearestDistance = distance
-                nearestBuyPoint = buyPointData
-            end
-        end
-        
-        if nearestBuyPoint and nearestDistance < 10.0 then
-            TriggerEvent('rex-ranch:client:openBuyMenu', nearestBuyPoint)
-        else
-            lib.notify({ title = 'Debug', description = 'No buy point nearby. Nearest distance: ' .. math.floor(nearestDistance) .. 'm', type = 'inform' })
-        end
-    end)
-end

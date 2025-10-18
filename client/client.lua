@@ -7,7 +7,7 @@ lib.locale()
 CreateThread(function()
     for _,ranchData in pairs(Config.RanchLocations) do
         if ranchData.showblip == true then
-            local RanchBlip = BlipAddForCoords(1664425300, ranchData.coords)
+            local RanchBlip = BlipAddForCoords(Config.BLIP_HASH, ranchData.coords)
             SetBlipSprite(RanchBlip, joaat(ranchData.blipsprite), true)
             SetBlipScale(RanchBlip, ranchData.blipscale)
             SetBlipName(RanchBlip, ranchData.blipname)

@@ -2,7 +2,7 @@ local RSGCore = exports['rsg-core']:GetCoreObject()
 local herdingActive = false
 local herdedAnimals = {}
 local herdingTarget = nil
-local herdingThread = nil
+local herdingThreadId = nil -- Changed from boolean to thread ID
 local herdingStartTime = nil
 local selectedAnimals = {} -- For individual animal selection
 local selectionMode = false -- Whether we're in selection mode
@@ -416,8 +416,8 @@ RegisterNetEvent('rex-ranch:client:stopHerding', function()
     herdingActive = false
     
     -- Stop herding thread
-    if herdingThread then
-        herdingThread = nil
+    if herdingThreadId then
+        herdingThreadId = nil
     end
     
     -- Collect animal IDs and clear tasks
@@ -627,7 +627,7 @@ function CreateAnimalBlip(animalId, entity, model)
     local blip = nil
     
     -- Create coordinate-based blip (more reliable in RedM)
-    blip = BlipAddForCoords(1664425300, entityPos.x, entityPos.y, entityPos.z)
+    blip = BlipAddForCoords(Config.BLIP_HASH, entityPos.x, entityPos.y, entityPos.z)
     
     if blip and blip ~= 0 then
         -- Set blip sprite
@@ -731,10 +731,16 @@ function StartHerding(animals, herdType)
     })
     
     -- Start herding control thread
-    CreateThread(function()
-        herdingThread = true
-        while herdingActive and herdingThread do
+    herdingThreadId = CreateThread(function()
+        local threadActive = true
+        while herdingActive and threadActive do
             Wait(100)
+            
+            -- Check if we should still be running (thread wasn't cancelled)
+            if not herdingActive or not herdingThreadId then
+                threadActive = false
+                break
+            end
             
             -- Check timeout
             if herdingStartTime and (GetGameTimer() - herdingStartTime) > (Config.HerdingTimeout * 1000) then
@@ -745,6 +751,11 @@ function StartHerding(animals, herdType)
             
             -- Update animal following
             UpdateHerdingMovement()
+        end
+        
+        -- Thread cleanup
+        if Config.Debug then
+            print('^3[HERDING DEBUG]^7 Herding thread ended')
         end
     end)
     
