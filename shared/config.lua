@@ -13,7 +13,7 @@ Config.MAX_ID_LENGTH = 9 -- Maximum length for animal IDs
 ---------------------------------
 -- debug settings
 ---------------------------------
-Config.Debug = true
+Config.Debug = false
 
 ---------------------------------
 -- npc settings
@@ -30,7 +30,7 @@ Config.RanchStorageMaxSlots = 100
 Config.AnimalDistanceSpawn = 50.0
 Config.AnimalFadeIn = true
 Config.ServerNotify = true
-Config.AnimalCronJob = '*/1 * * * *' -- every 5 minutes (for testing), change to '0 * * * *' for hourly
+Config.AnimalCronJob = '*/15 * * * *' -- every 5 minutes (for testing), change to '0 * * * *' for hourly
 Config.MaxRanchAnimals = 10
 Config.UpdateClientsOnCron = true -- Update client animal data when cronjob runs
 Config.RefreshAfterCron = true -- Full refresh of animal data after cronjob completion
@@ -38,9 +38,9 @@ Config.RefreshAfterCron = true -- Full refresh of animal data after cronjob comp
 ---------------------------------
 -- animal management settings
 ---------------------------------
-Config.HungerDecayRate = 10 -- hunger reduction per hour
-Config.ThirstDecayRate = 15 -- thirst reduction per hour
-Config.HealthDecayRate = 5 -- health reduction per hour when starving/dehydrated
+Config.HungerDecayRate = 1 -- hunger reduction per cronjob run
+Config.ThirstDecayRate = 1 -- thirst reduction per cronjob run
+Config.HealthDecayRate = 5 -- health reduction per cronjob run when starving/dehydrated
 Config.MinSurvivalStats = 0 -- minimum hunger/thirst before health starts decaying
 Config.FeedItem = 'animal_feed' -- item required to feed animals
 Config.WaterItem = 'water_bucket' -- item required to water animals
@@ -89,7 +89,7 @@ Config.AgePricing = {
     young = 0.5,     -- animals below prime age (50% of base price)
     prime = 1.5,     -- animals in prime age (150% of base price)
     adult = 1.0,     -- animals between prime and old (100% of base price)
-    old = 0.7        -- old animals (70% of base price)
+    old   = 0.7      -- old animals (70% of base price)
 }
 
 -- Base selling prices (will be modified by age multipliers)
@@ -134,8 +134,8 @@ Config.AutomaticBreedingNotifications = true -- Send notifications to ranch owne
 
 -- Gender ratios when buying animals (chance of male)
 Config.GenderRatios = {
-    ['a_c_bull_01'] = 1.0,       -- 100% chance of male (it's specifically a bull)
-    ['a_c_cow'] = 0.0            -- 0% chance of male, 100% chance of female (cows are always female)
+    ['a_c_bull_01'] = 1.0, -- 100% chance of male (it's specifically a bull)
+    ['a_c_cow'] = 0.0      -- 0% chance of male, 100% chance of female (cows are always female)
 }
 
 -- Breeding configurations per animal type
