@@ -13,7 +13,7 @@ Config.MAX_ID_LENGTH = 9 -- Maximum length for animal IDs
 ---------------------------------
 -- debug settings
 ---------------------------------
-Config.Debug = false
+Config.Debug = true
 
 ---------------------------------
 -- npc settings
@@ -146,7 +146,7 @@ Config.BreedingConfig = {
         enabled = true
     },
     ['a_c_cow'] = {
-        gestationPeriod = 259200,  -- 3 days in seconds (represents 9 months)
+        gestationPeriod = 259200,    -- 3 days in seconds (represents 9 months)
         offspringCount = { min = 1, max = 1 }, -- always 1 calf
         breedingSeasonStart = 1,     -- day of year (1-365)
         breedingSeasonEnd = 365,     -- year-round breeding
@@ -165,7 +165,7 @@ Config.AnimalProducts = {
     },
     ['a_c_cow'] = {
         product = 'milk',
-        productionTime = 3600, -- 1 hour in seconds
+        productionTime = 21600, -- 6 hours in seconds
         amount = 1,
         requiresHealth = 50, -- minimum health to produce
         requiresHunger = 30, -- minimum hunger to produce

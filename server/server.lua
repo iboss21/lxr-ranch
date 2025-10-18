@@ -534,12 +534,12 @@ lib.cron.new(Config.AnimalCronJob, function()
         end
 
         local scaleTable = {
-            [0] = 0.5,
-            [1] = 0.6,
-            [2] = 0.7,
-            [3] = 0.8,
-            [4] = 0.9,
-            [5] = 1.0
+            [0] = 0.50,
+            [1] = 0.60,
+            [2] = 0.70,
+            [3] = 0.80,
+            [4] = 0.90,
+            [5] = 1.00
         }
 
         local animalsToRemove = {}
@@ -564,7 +564,7 @@ lib.cron.new(Config.AnimalCronJob, function()
             end
 
             -- Prepare batch update data instead of individual queries
-            local scale = scaleTable[math.min(animalAge, 5)] or 1.0
+            local scale = scaleTable[math.min(animalAge, 5)] or 1.00
             
             -- Check for breeding/pregnancy events if enabled
             if Config.BreedingEnabled and animal.pregnant == 1 and animal.gestation_end_time then
@@ -769,7 +769,7 @@ lib.cron.new(Config.AnimalCronJob, function()
                     table.insert(params, update.animalid) -- for health WHEN
                     table.insert(params, update.health or 0)  -- for health THEN
                     table.insert(params, update.animalid) -- for scale WHEN
-                    table.insert(params, update.scale or 1.0)  -- for scale THEN
+                    table.insert(params, update.scale or 1.00)  -- for scale THEN
                     
                     ::continue_update::
                 end
