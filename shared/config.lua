@@ -1,16 +1,6 @@
 Config = {}
 
 ---------------------------------
--- system constants
----------------------------------
-Config.BLIP_HASH = 1664425300 -- Standard blip hash for RedM
-Config.ANIMAL_ID_MIN = 111111 -- Minimum animal ID
-Config.ANIMAL_ID_MAX = 999999 -- Maximum animal ID
-Config.FALLBACK_ID_SUFFIX_MIN = 1000 -- Minimum suffix for fallback IDs
-Config.FALLBACK_ID_SUFFIX_MAX = 9999 -- Maximum suffix for fallback IDs
-Config.MAX_ID_LENGTH = 9 -- Maximum length for animal IDs
-
----------------------------------
 -- debug settings
 ---------------------------------
 Config.Debug = false
@@ -60,12 +50,6 @@ Config.IndividualSelectionEnabled = true -- enable individual animal selection f
 Config.ShowAnimalDistance = true -- show distance to animals in selection menu
 Config.SelectionRangeMultiplier = 1.5 -- multiplier for selection range vs herding distance
 
--- Herding blip settings
-Config.ShowHerdingBlips = true -- Show blips on herded animals
-Config.HerdingBlipSprite = 'blip_ambient_herd' -- Blip sprite for herded animals
-Config.HerdingBlipScale = 0.3 -- Size of herding blips
-Config.HerdingBlipColor = 'WHITE' -- Color of herding blips
-
 ---------------------------------
 -- animal buy/sell settings
 ---------------------------------
@@ -79,7 +63,7 @@ Config.CowSellPrice = 1
 ---------------------------------
 -- animal sale point settings
 ---------------------------------
-Config.MinAgeToSell = 6 -- minimum age in days to sell animals (reduced from 2 for easier testing)
+Config.MinAgeToSell = 6 -- minimum age in days to sell animals (set to 0 for testing)
 Config.PrimeAgeStart = 6 -- age when animals are considered prime
 Config.PrimeAgeEnd = 30 -- age when animals are no longer prime
 Config.OldAgeStart = 31 -- age when animals are considered old

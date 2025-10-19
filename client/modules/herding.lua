@@ -6,7 +6,7 @@ local herdingThreadId = nil -- Changed from boolean to thread ID
 local herdingStartTime = nil
 local selectedAnimals = {} -- For individual animal selection
 local selectionMode = false -- Whether we're in selection mode
-local animalBlips = {} -- Track blips for herded animals
+-- Blip tracking removed
 lib.locale()
 
 ---------------------------------------------
@@ -440,8 +440,7 @@ RegisterNetEvent('rex-ranch:client:stopHerding', function()
         end
     end
     
-    -- Remove all animal blips
-    RemoveAllAnimalBlips()
+    -- Blip removal no longer needed
     
     local animalCount = #herdedAnimals
     herdedAnimals = {}
@@ -576,9 +575,7 @@ function GetNearbyAnimals()
                 if not modelName then
                     local commonModels = {
                         [GetHashKey('a_c_cow')] = 'a_c_cow',
-                        [GetHashKey('a_c_sheep_01')] = 'a_c_sheep_01',
-                        [GetHashKey('a_c_pig_01')] = 'a_c_pig_01',
-                        [GetHashKey('a_c_horse_americanpaint_greyovero')] = 'a_c_horse_americanpaint_greyovero'
+                        [GetHashKey('a_c_bull_01')] = 'a_c_bull_01'
                     }
                     modelName = commonModels[entityModel]
                 end
@@ -608,85 +605,21 @@ end
 function GetAnimalDisplayName(model)
     local displayNames = {
         ['a_c_cow'] = 'Cow',
-        ['a_c_sheep_01'] = 'Sheep',
-        ['a_c_pig_01'] = 'Pig',
-        ['a_c_horse_americanpaint_greyovero'] = 'Horse'
+        ['a_c_bull_01'] = 'Bull'
     }
     return displayNames[model] or 'Animal'
 end
 
 ---------------------------------------------
--- blip management for herded animals
+-- blip functionality removed
 ---------------------------------------------
-function CreateAnimalBlip(animalId, entity, model)
-    if not Config.ShowHerdingBlips or not DoesEntityExist(entity) then
-        return nil
-    end
-
-    local entityPos = GetEntityCoords(entity)
-    local blip = nil
-    
-    -- Create coordinate-based blip (more reliable in RedM)
-    blip = BlipAddForCoords(Config.BLIP_HASH, entityPos.x, entityPos.y, entityPos.z)
-    
-    if blip and blip ~= 0 then
-        -- Set blip sprite
-        local blipSprite = joaat(Config.HerdingBlipSprite) or joaat('blip_ambient_herd')
-        SetBlipSprite(blip, blipSprite, true)
-        
-        -- Set blip name
-        local animalName = GetAnimalDisplayName(model)
-        SetBlipName(blip, animalName .. ' (Herding)')
-        
-        -- Set blip scale
-        local blipScale = Config.HerdingBlipScale or 0.2
-        SetBlipScale(blip, blipScale)
-        
-        if Config.Debug then
-            print('^2[HERDING DEBUG]^7 Created blip ' .. blip .. ' for animal ' .. animalId .. ' (' .. animalName .. ') at ' .. tostring(entityPos))
-        end
-        
-        return blip
-    end
-    
-    if Config.Debug then
-        print('^1[HERDING DEBUG]^7 Failed to create blip for animal ' .. animalId .. ' at ' .. tostring(entityPos))
-    end
-    
-    return nil
-end
-
-function RemoveAnimalBlip(animalId)
-    if animalBlips[animalId] then
-        local blip = animalBlips[animalId]
-        if DoesBlipExist(blip) then
-            RemoveBlip(blip)
-            if Config.Debug then
-                print('^1[HERDING DEBUG]^7 Removed blip ' .. blip .. ' for animal ' .. animalId)
-            end
-        end
-        animalBlips[animalId] = nil
-    end
-end
-
-function RemoveAllAnimalBlips()
-    for animalId, blip in pairs(animalBlips) do
-        if DoesBlipExist(blip) then
-            RemoveBlip(blip)
-            if Config.Debug then
-                print('^1[HERDING DEBUG]^7 Removed blip ' .. blip .. ' for animal ' .. animalId)
-            end
-        end
-    end
-    animalBlips = {}
-end
 
 function StartHerding(animals, herdType)
     herdingActive = true
     herdingStartTime = GetGameTimer()
     herdedAnimals = {}
     
-    -- Convert animals to herded format and create blips
+    -- Convert animals to herded format
     local animalIds = {}
     for _, animalData in pairs(animals) do
         herdedAnimals[animalData.id] = {
@@ -695,14 +628,6 @@ function StartHerding(animals, herdType)
             originalPos = animalData.position
         }
         table.insert(animalIds, animalData.id)
-        
-        -- Create blip for this animal
-        if Config.ShowHerdingBlips then
-            local blip = CreateAnimalBlip(animalData.id, animalData.entity, animalData.model)
-            if blip then
-                animalBlips[animalData.id] = blip
-            end
-        end
     end
     
     -- Enable transport mode to prevent despawning
@@ -774,13 +699,14 @@ function UpdateHerdingMovement()
     local playerPos = GetEntityCoords(cache.ped)
     local playerSpeed = GetEntitySpeed(cache.ped)
     
-    -- Only update if player is moving
-    if playerSpeed > 0.1 then
-        local animalIndex = 0
-        for animalId, animalInfo in pairs(herdedAnimals) do
-            if DoesEntityExist(animalInfo.entity) and not IsPedDeadOrDying(animalInfo.entity, true) then
-                animalIndex = animalIndex + 1
-                
+    -- Update animal movement
+    local animalIndex = 0
+    for animalId, animalInfo in pairs(herdedAnimals) do
+        if DoesEntityExist(animalInfo.entity) and not IsPedDeadOrDying(animalInfo.entity, true) then
+            animalIndex = animalIndex + 1
+            
+            -- Only move animals if player is moving
+            if playerSpeed > 0.1 then
                 -- Calculate follow position (spread animals around player)
                 local angle = (animalIndex * 60) * (math.pi / 180) -- Convert to radians
                 local followDistance = Config.HerdingFollowDistance + (animalIndex * 0.5)
@@ -793,23 +719,22 @@ function UpdateHerdingMovement()
                 -- Set animal to follow to position
                 ClearPedTasks(animalInfo.entity)
                 TaskGoToCoordAnyMeans(animalInfo.entity, followPos.x, followPos.y, followPos.z, Config.HerdingSpeed, 0, false, 786603, 0xbf800000)
-            else
-                -- Remove dead or non-existent animals
-                RemoveAnimalBlip(animalId)
-                herdedAnimals[animalId] = nil
             end
+        else
+            -- Remove dead or non-existent animals
+            herdedAnimals[animalId] = nil
         end
-        
-        -- Check if all animals are gone
-        local remainingAnimals = 0
-        for _ in pairs(herdedAnimals) do
-            remainingAnimals = remainingAnimals + 1
-        end
-        
-        if remainingAnimals == 0 then
-            TriggerEvent('rex-ranch:client:stopHerding')
-            lib.notify({ title = 'No Animals Left', description = 'All herded animals are gone', type = 'info' })
-        end
+    end
+    
+    -- Check if all animals are gone
+    local remainingAnimals = 0
+    for _ in pairs(herdedAnimals) do
+        remainingAnimals = remainingAnimals + 1
+    end
+    
+    if remainingAnimals == 0 then
+        TriggerEvent('rex-ranch:client:stopHerding')
+        lib.notify({ title = 'No Animals Left', description = 'All herded animals are gone', type = 'info' })
     end
 end
 
@@ -823,8 +748,6 @@ AddEventHandler('onResourceStop', function(resourceName)
     end
     -- Clear any pending selections
     selectedAnimals = {}
-    -- Remove all blips
-    RemoveAllAnimalBlips()
 end)
 
 -- Additional selection management commands
@@ -867,6 +790,8 @@ RegisterCommand('herdclear', function()
         lib.notify({ title = 'No Selection', description = 'No animals were selected', type = 'info' })
     end
 end, false)
+
+-- herdblipstatus command removed
 
 -- Note: Use /herd command to access herding menu
 -- RegisterKeyMapping is not available in RedM

@@ -227,8 +227,14 @@ RegisterNetEvent('rex-ranch:client:openSaleMenu', function(salePointData)
             end
         end
         
-        -- Add nearby animals first (sellable)
-        for _, animal in ipairs(nearbyAnimals) do
+        -- Add animals (sellable)
+        local animalsToShow = nearbyAnimals
+        if not Config.RequireAnimalPresent then
+            -- When proximity is not required, show all animals as sellable
+            animalsToShow = animals
+        end
+        
+        for _, animal in ipairs(animalsToShow) do
             local animalName = GetAnimalDisplayName(animal.model)
             
             -- Health status indicator
@@ -300,10 +306,8 @@ end)
 ---------------------------------------------
 function GetAnimalDisplayName(model)
     local displayNames = {
-        ['a_c_cow'] = 'Cow',
-        ['a_c_sheep_01'] = 'Sheep',
-        ['a_c_pig_01'] = 'Pig',
-        ['a_c_horse_americanpaint_greyovero'] = 'Horse'
+        ['a_c_bull_01'] = 'Bull',
+        ['a_c_cow'] = 'Cow'
     }
     return displayNames[model] or 'Animal'
 end
@@ -314,11 +318,11 @@ end
 RegisterNetEvent('rex-ranch:client:confirmSale', function(animal, salePointName, salePointCoords)
     local animalName = GetAnimalDisplayName(animal.model)
     
-    -- Check if animal is nearby before showing confirmation
+    -- Check if animal is nearby before showing confirmation (only if proximity is required)
     if Config.RequireAnimalPresent and not animal.isNearby then
         lib.notify({ 
             title = 'Animal Too Far', 
-            description = 'This animal is ' .. animal.distance .. 'm away. Bring it closer first!', 
+            description = 'This animal is ' .. (animal.distance or 'unknown') .. 'm away. Bring it closer first!', 
             type = 'error' 
         })
         return

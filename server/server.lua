@@ -1830,6 +1830,14 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getNearbyAnimalsForSale', fun
                 local distance = #(salePointCoords - animalPos)
                 local isNearby = distance <= Config.AnimalSaleDistance
                 
+                if Config.Debug then
+                    print('^3[SALE LIST DEBUG]^7 Animal ' .. animal.animalid .. ' (' .. animal.model .. '):')
+                    print('^3[SALE LIST DEBUG]^7 - Position: ' .. tostring(animalPos))
+                    print('^3[SALE LIST DEBUG]^7 - Distance from sale point: ' .. math.floor(distance * 10) / 10 .. 'm')
+                    print('^3[SALE LIST DEBUG]^7 - Max allowed distance: ' .. Config.AnimalSaleDistance .. 'm')
+                    print('^3[SALE LIST DEBUG]^7 - Is nearby: ' .. tostring(isNearby))
+                end
+                
                 local salePrice = CalculateSalePrice(animal.model, actualAge)
                 local ageCategory = GetAgeCategory(actualAge)
                 
@@ -1894,12 +1902,31 @@ RegisterNetEvent('rex-ranch:server:sellAnimal', function(animalid, expectedPrice
             local animalPos = vector3(animal.pos_x, animal.pos_y, animal.pos_z)
             local distance = #(salePointCoords - animalPos)
             
+            if Config.Debug then
+                print('^3[SALE DEBUG]^7 Player ' .. src .. ' attempting to sell animal ' .. animalid .. ':')
+                print('^3[SALE DEBUG]^7 - Animal position: ' .. tostring(animalPos))
+                print('^3[SALE DEBUG]^7 - Sale point: ' .. tostring(salePointCoords))
+                print('^3[SALE DEBUG]^7 - Distance: ' .. math.floor(distance * 10) / 10 .. 'm (max allowed: ' .. Config.AnimalSaleDistance .. 'm)')
+                print('^3[SALE DEBUG]^7 - Within range: ' .. tostring(distance <= Config.AnimalSaleDistance))
+            end
+            
             if distance > Config.AnimalSaleDistance then
                 TriggerClientEvent('ox_lib:notify', src, {
                     type = 'error', 
                     description = 'Animal is too far from sale point! Distance: ' .. math.floor(distance * 10) / 10 .. 'm (max: ' .. Config.AnimalSaleDistance .. 'm)'
                 })
+                if Config.Debug then
+                    print('^1[SALE BLOCKED]^7 Animal ' .. animalid .. ' sale blocked due to distance: ' .. math.floor(distance * 10) / 10 .. 'm > ' .. Config.AnimalSaleDistance .. 'm')
+                end
                 return
+            else
+                if Config.Debug then
+                    print('^2[SALE ALLOWED]^7 Animal ' .. animalid .. ' is within selling distance')
+                end
+            end
+        else
+            if Config.Debug then
+                print('^3[SALE DEBUG]^7 Proximity check disabled or no sale point coordinates - allowing sale of animal ' .. animalid)
             end
         end
         
@@ -1918,12 +1945,8 @@ RegisterNetEvent('rex-ranch:server:sellAnimal', function(animalid, expectedPrice
                 local animalName = 'Animal'
                 if animal.model == 'a_c_cow' then
                     animalName = 'Cow'
-                elseif animal.model == 'a_c_sheep_01' then
-                    animalName = 'Sheep'
-                elseif animal.model == 'a_c_pig_01' then
-                    animalName = 'Pig'
-                elseif animal.model == 'a_c_horse_americanpaint_greyovero' then
-                    animalName = 'Horse'
+                elseif animal.model == 'a_c_bull_01' then
+                    animalName = 'Bull'
                 end
                 
                 local ageCategory = GetAgeCategory(actualAge)
@@ -2002,9 +2025,11 @@ RegisterNetEvent('rex-ranch:server:sellAllAnimals', function(animals, salePointC
                     
                     if canSell then
                         -- Remove from database
-                        local deleteSuccess = MySQL.execute.await('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animal.animalid})
+                        local deleteSuccess, deleteResult = pcall(function()
+                            return MySQL.update.await('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animal.animalid})
+                        end)
                         
-                        if deleteSuccess and deleteSuccess > 0 then
+                        if deleteSuccess and deleteResult and deleteResult > 0 then
                             -- Add to totals
                             soldAnimals = soldAnimals + 1
                             totalEarned = totalEarned + actualPrice
@@ -2014,12 +2039,8 @@ RegisterNetEvent('rex-ranch:server:sellAllAnimals', function(animals, salePointC
                             local animalName = 'Animal'
                             if dbAnimal.model == 'a_c_cow' then
                                 animalName = 'Cow'
-                            elseif dbAnimal.model == 'a_c_sheep_01' then
-                                animalName = 'Sheep'
-                            elseif dbAnimal.model == 'a_c_pig_01' then
-                                animalName = 'Pig'
-                            elseif dbAnimal.model == 'a_c_horse_americanpaint_greyovero' then
-                                animalName = 'Horse'
+                            elseif dbAnimal.model == 'a_c_bull_01' then
+                                animalName = 'Bull'
                             end
                             animalCounts[animalName] = (animalCounts[animalName] or 0) + 1
                         else
@@ -2100,7 +2121,7 @@ RegisterNetEvent('rex-ranch:server:buyAnimal', function(data)
     end
     
     -- Validate animal model
-    local validAnimals = {'a_c_cow', 'a_c_sheep_01', 'a_c_pig_01', 'a_c_horse_americanpaint_greyovero', 'a_c_bull_01'}
+    local validAnimals = {'a_c_cow', 'a_c_bull_01'}
     local isValidAnimal = false
     for _, validAnimal in ipairs(validAnimals) do
         if data.animalType == validAnimal then
@@ -2407,12 +2428,6 @@ RegisterNetEvent('rex-ranch:server:startBreeding', function(animal1id, animal2id
             if animal1.model == 'a_c_cow' or animal1.model == 'a_c_bull_01' or 
                animal2.model == 'a_c_cow' or animal2.model == 'a_c_bull_01' then
                 animalName = 'cattle'
-            elseif animal1.model == 'a_c_sheep_01' then
-                animalName = 'sheep'
-            elseif animal1.model == 'a_c_pig_01' then
-                animalName = 'pigs'
-            elseif animal1.model == 'a_c_horse_americanpaint_greyovero' then
-                animalName = 'horses'
             end
         
         local gestationDays = math.floor(breedingConfig.gestationPeriod / (24 * 60 * 60))
@@ -2452,3 +2467,33 @@ RegisterNetEvent('rex-ranch:server:startBreeding', function(animal1id, animal2id
         end
     end)
 end)
+
+---------------------------------------------
+-- Admin/Debug Commands
+---------------------------------------------
+RegisterCommand('testanimalsurvival', function(source, args, rawCommand)
+    local src = source
+    if src == 0 then -- Console only
+        print('^2[REX-RANCH ADMIN]^7 Manually triggering animal survival cronjob...')
+        ProcessAnimalSurvival()
+        print('^2[REX-RANCH ADMIN]^7 Animal survival cronjob completed.')
+    else
+        print('^1[REX-RANCH ADMIN]^7 Console only command')
+    end
+end, true)
+
+RegisterCommand('debuganimalcount', function(source, args, rawCommand)
+    local src = source
+    if src == 0 then -- Console only
+        MySQL.query('SELECT ranchid, COUNT(*) as count FROM rex_ranch_animals GROUP BY ranchid', {}, function(result)
+            if result and #result > 0 then
+                print('^3[REX-RANCH DEBUG]^7 Animal counts by ranch:')
+                for _, ranch in ipairs(result) do
+                    print('^3[REX-RANCH DEBUG]^7 - ' .. ranch.ranchid .. ': ' .. ranch.count .. ' animals')
+                end
+            else
+                print('^3[REX-RANCH DEBUG]^7 No animals found in database')
+            end
+        end)
+    end
+end, true)
