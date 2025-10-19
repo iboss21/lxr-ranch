@@ -2,10 +2,6 @@
 
 A comprehensive ranching simulation system for RedM servers, featuring realistic animal management, breeding, herding, and production mechanics.
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
-![RedM](https://img.shields.io/badge/RedM-Compatible-red.svg)
-![Framework](https://img.shields.io/badge/Framework-RSG--Core-green.svg)
-
 ## 🌟 Key Features
 
 ### 🐄 Advanced Animal Management
@@ -53,11 +49,10 @@ A comprehensive ranching simulation system for RedM servers, featuring realistic
 ## 📍 Requirements
 
 ### Framework Dependencies
-- **RedM Server** (Latest build recommended)
-- **RSG-Core Framework** (Required - core framework)
+- **RSG Framework** (Required - core framework)
 - **ox_lib** (Required - UI and utility library)
 - **oxmysql** (Required - MySQL database connector)
-- **rsg-target** (Required - NPC and entity interactions)
+- **ox_target** (Required - NPC and entity interactions)
 - **rsg-inventory** (Required - inventory system integration)
 
 ### Server Requirements
@@ -81,30 +76,6 @@ A comprehensive ranching simulation system for RedM servers, featuring realistic
 source path/to/rex-ranch/installation/rex-ranch.sql
 ```
 
-2. **Add required jobs** (choose one method):
-```sql
--- Option A: Manual SQL execution
-INSERT INTO `jobs` (`name`, `label`, `defaultDuty`, `offDutyPay`, `grades`) VALUES
-('macfarranch', 'Macfarlane Ranch', 1, 0, '{"0": {"name": "Ranch Hand", "payment": 50}, "1": {"name": "Ranch Owner", "payment": 100}}');
--- (Add other ranches as needed)
-```
-```lua
--- Option B: Use provided job file
--- Copy contents from installation/shared_jobs.lua to your jobs configuration
-```
-
-3. **Add required items**:
-```sql
--- Essential items for animal care and production
-INSERT INTO `items` (`name`, `label`, `weight`, `type`, `image`, `unique`, `useable`, `shouldClose`, `description`) VALUES
-('animal_feed', 'Animal Feed', 5, 'item', 'animal_feed.png', 0, 1, 1, 'Nutritious feed for livestock'),
-('water_bucket', 'Water Bucket', 10, 'item', 'water_bucket.png', 0, 1, 1, 'Fresh water for animals'),
-('milk', 'Fresh Milk', 2, 'item', 'milk.png', 0, 0, 1, 'Fresh milk from cows'),
-('wool', 'Sheep Wool', 1, 'item', 'wool.png', 0, 0, 1, 'Soft wool from sheep'),
-('bacon', 'Raw Bacon', 3, 'item', 'bacon.png', 0, 0, 1, 'Fresh bacon from pigs'),
-('horsehair', 'Horse Hair', 1, 'item', 'horsehair.png', 0, 0, 1, 'Quality horse hair');
-```
-
 ### Step 3: Server Configuration
 1. **Add to server.cfg**:
 ```cfg
@@ -112,7 +83,7 @@ INSERT INTO `items` (`name`, `label`, `weight`, `type`, `image`, `unique`, `usea
 ensure ox_lib
 ensure oxmysql
 ensure rsg-core
-ensure rsg-target
+ensure ox_target
 ensure rsg-inventory
 ensure rex-ranch
 ```
@@ -124,32 +95,10 @@ add_ace group.admin "rex-ranch.admin" allow
 ```
 
 ### Step 4: Job Configuration
-Add ranch jobs to your RSG-Core jobs table. Example SQL:
-```sql
-INSERT INTO `jobs` (`name`, `label`, `defaultDuty`, `offDutyPay`, `grades`) VALUES
-('macfarranch', 'Macfarlane Ranch', 1, 0, '{"0": {"name": "Ranch Hand", "payment": 50}, "1": {"name": "Ranch Owner", "payment": 100}}'),
-('emeraldranch', 'Emerald Ranch', 1, 0, '{"0": {"name": "Ranch Hand", "payment": 50}, "1": {"name": "Ranch Owner", "payment": 100}}'),
-('pronghornranch', 'Pronghorn Ranch', 1, 0, '{"0": {"name": "Ranch Hand", "payment": 50}, "1": {"name": "Ranch Owner", "payment": 100}}'),
-('downesranch', 'Downes Ranch', 1, 0, '{"0": {"name": "Ranch Hand", "payment": 50}, "1": {"name": "Ranch Owner", "payment": 100}}'),
-('hillhavenranch', 'Hill Haven Ranch', 1, 0, '{"0": {"name": "Ranch Hand", "payment": 50}, "1": {"name": "Ranch Owner", "payment": 100}}'),
-('hangingdogranch', 'Hanging Dog Ranch', 1, 0, '{"0": {"name": "Ranch Hand", "payment": 50}, "1": {"name": "Ranch Owner", "payment": 100}}');
-```
+Add ranch jobs to your rsg-core\shared\jobs.lua
 
 ### Step 5: Items Setup
-Add the following items to your RSG-Core items table:
-```sql
--- Animal feed item
-INSERT INTO `items` (`name`, `label`, `weight`, `type`, `image`, `unique`, `useable`, `shouldClose`, `combinable`, `description`) VALUES
-('animal_feed', 'Animal Feed', 5, 'item', 'animal_feed.png', 0, 1, 1, NULL, 'Nutritious feed for livestock'),
-('water_bucket', 'Water Bucket', 10, 'item', 'water_bucket.png', 0, 1, 1, NULL, 'Fresh water for animals');
-
--- Animal products
-INSERT INTO `items` (`name`, `label`, `weight`, `type`, `image`, `unique`, `useable`, `shouldClose`, `combinable`, `description`) VALUES
-('milk', 'Fresh Milk', 2, 'item', 'milk.png', 0, 0, 1, NULL, 'Fresh milk from cows'),
-('wool', 'Sheep Wool', 1, 'item', 'wool.png', 0, 0, 1, NULL, 'Soft wool from sheep'),
-('bacon', 'Raw Bacon', 3, 'item', 'bacon.png', 0, 0, 1, NULL, 'Fresh bacon from pigs'),
-('horsehair', 'Horse Hair', 1, 'item', 'horsehair.png', 0, 0, 1, NULL, 'Quality horse hair');
-```
+Add ranch items to your rsg-core\shared\items.lua
 
 ## Configuration
 
@@ -207,11 +156,6 @@ Configure animal production in `Config.AnimalProducts`:
 
 #### Getting Started
 1. **Obtain Ranch Job**: Get assigned a ranch job from an admin
-   ```
-   Available Jobs: macfarranch, emeraldranch, pronghornranch, 
-                   downesranch, hillhavenranch, hangingdogranch
-   Job Grades: 0 (Trainee), 1 (Ranch Hand), 2 (Manager)
-   ```
 
 2. **Find Your Ranch**: Look for ranch blips on your map or visit these locations:
    - **Macfarlane Ranch**: New Austin region
@@ -386,7 +330,7 @@ Config.AgePricing = {
 Config.AnimalProducts = {
     ['a_c_cow'] = {
         product = 'milk',
-        productionTime = 21600,        -- 6 hours
+        productionTime = 21600, -- 6 hours
         requiresHealth = 50,
         requiresHunger = 30,
         requiresThirst = 30
@@ -430,14 +374,13 @@ This resource welcomes community contributions:
 - Report bugs and issues
 - Suggest feature improvements
 - Share configuration optimizations
-- Contribute code improvements
 
 ---
 
 ## 🎆 Credits & License
 
-**Rex Ranch v2.0** - A comprehensive ranching simulation for RedM
+**Rex Ranch v2.0.x** - A comprehensive ranching simulation for RedM
 
-Built for the RedM community with ❤️
+Built by RexShack for the RedM community with ❤️
 
 *Transform your server into the ultimate Wild West ranching experience!* 🤠🐄🌾
