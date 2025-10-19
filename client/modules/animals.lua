@@ -507,7 +507,7 @@ RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
                 -- Display the menu with updated pregnancy progress
                 lib.registerContext({
                     id = 'animal_info_menu',
-                    title = 'Ranch Animal #'..freshData.animalid,
+                    title = 'Animal #'..freshData.animalid,
                     options = menuOptions
                 })
                 lib.showContext('animal_info_menu')

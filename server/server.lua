@@ -979,13 +979,14 @@ function ProcessAnimalSurvival()
                     print('^1[REX-RANCH]^7 Animal ' .. animal.animalid .. ' has died and will be removed from the database.')
                 end
             else
-                -- Collect updates for batch processing including scale
+                -- Collect updates for batch processing including scale and age
                 table.insert(batchUpdates, {
                     animalid = animal.animalid,
                     hunger = newHunger,
                     thirst = newThirst,
                     health = newHealth,
-                    scale = scale
+                    scale = scale,
+                    age = animalAge
                 })
                 if Config.Debug then
                     print('^2[DEBUG]^7 Prepared update for animal ' .. animal.animalid .. ' - Hunger: ' .. newHunger .. ', Thirst: ' .. newThirst .. ', Health: ' .. newHealth)
@@ -1011,11 +1012,12 @@ function ProcessAnimalSurvival()
                 end
                 
                 -- Use individual updates for better reliability (non-blocking)
-                MySQL.update('UPDATE rex_ranch_animals SET hunger = ?, thirst = ?, health = ?, scale = ? WHERE animalid = ?', {
+                MySQL.update('UPDATE rex_ranch_animals SET hunger = ?, thirst = ?, health = ?, scale = ?, age = ? WHERE animalid = ?', {
                     update.hunger or 0,
                     update.thirst or 0,
                     update.health or 0,
                     update.scale or 1.00,
+                    update.age or 0,
                     update.animalid
                 }, function(result)
                     -- result can be a table with affectedRows or a number
@@ -1029,7 +1031,7 @@ function ProcessAnimalSurvival()
                     if rowsAffected > 0 then
                         updateSuccess = updateSuccess + 1
                         if Config.Debug then
-                            print('^2[DEBUG]^7 Updated animal ' .. update.animalid .. ' - Hunger: ' .. (update.hunger or 0) .. ', Thirst: ' .. (update.thirst or 0) .. ', Health: ' .. (update.health or 0))
+                            print('^2[DEBUG]^7 Updated animal ' .. update.animalid .. ' - Hunger: ' .. (update.hunger or 0) .. ', Thirst: ' .. (update.thirst or 0) .. ', Health: ' .. (update.health or 0) .. ', Age: ' .. (update.age or 0) .. ' days')
                         end
                         
                         -- Update client-side data for this specific animal
@@ -1038,7 +1040,8 @@ function ProcessAnimalSurvival()
                                 hunger = update.hunger,
                                 thirst = update.thirst,
                                 health = update.health,
-                                scale = update.scale
+                                scale = update.scale,
+                                age = update.age
                             })
                         end
                     else
