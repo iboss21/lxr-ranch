@@ -158,20 +158,20 @@ Config.BreedingConfig = {
 
 Config.AnimalProducts = {
     ['a_c_bull_01'] = {
-        product = 'hide',
-        productionTime = 86400, -- 24 hours in seconds (longer production time)
+        product = 'fertilizer',
+        productionTime = 3600, -- every hour in seconds
         amount = 1,
-        requiresHealth = 60,
-        requiresHunger = 40,
-        requiresThirst = 40
+        requiresHealth = 60, -- minimum health to produce
+        requiresHunger = 40, -- minimum hunger to produce
+        requiresThirst = 40  -- minimum thirst to produce
     },
     ['a_c_cow'] = {
         product = 'milk',
-        productionTime = 21600, -- 6 hours in seconds
+        productionTime = 3600, -- every hour in seconds
         amount = 1,
-        requiresHealth = 50, -- minimum health to produce
-        requiresHunger = 30, -- minimum hunger to produce
-        requiresThirst = 30  -- minimum thirst to produce
+        requiresHealth = 60, -- minimum health to produce
+        requiresHunger = 40, -- minimum hunger to produce
+        requiresThirst = 40  -- minimum thirst to produce
     }
 }
 ---------------------------------
@@ -291,7 +291,7 @@ Config.SalePointLocations = {
 ---------------------------------
 Config.BuyPointLocations = {
     {
-        name = 'Livestock Dealer', -- testing
+        name = 'Livestock Dealer', -- testing Emerald Ranch
         coords = vector3(1383.58, 292.34, 88.18),
         npcmodel = `mp_u_m_m_trader_01`,
         npccoords = vector4(1383.58, 292.34, 88.18, 267.87),

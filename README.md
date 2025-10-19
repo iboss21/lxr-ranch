@@ -80,18 +80,7 @@ source path/to/rex-ranch/installation/rex-ranch.sql
 1. **Add to server.cfg**:
 ```cfg
 # Resource loading (ensure dependencies load first)
-ensure ox_lib
-ensure oxmysql
-ensure rsg-core
-ensure ox_target
-ensure rsg-inventory
 ensure rex-ranch
-```
-
-2. **Configure permissions**:
-```cfg
-# Add ranch management permissions (if using admin system)
-add_ace group.admin "rex-ranch.admin" allow
 ```
 
 ### Step 4: Job Configuration
@@ -140,14 +129,14 @@ Config.BaseSellPrices = {
 ### Production Settings
 Configure animal production in `Config.AnimalProducts`:
 ```lua
-['a_c_cow'] = {
-    product = 'milk',
-    productionTime = 21600, -- 6 hours in seconds
-    amount = 1,
-    requiresHealth = 50,
-    requiresHunger = 30,
-    requiresThirst = 30
-}
+    ['a_c_cow'] = {
+        product = 'milk',
+        productionTime = 3600, -- every hour in seconds
+        amount = 1,
+        requiresHealth = 60, -- minimum health to produce
+        requiresHunger = 40, -- minimum hunger to produce
+        requiresThirst = 40  -- minimum thirst to produce
+    }
 ```
 
 ## 🎮 Usage Guide
@@ -206,7 +195,9 @@ Configure animal production in `Config.AnimalProducts`:
 /givejob [player_id] [ranch_name] [grade]
 
 -- Example: Make player ID 1 a manager at Macfarlane Ranch
-/givejob 1 macfarranch 2
+/givejob 1 macfarranch 0 -- Trainee Rancher
+/givejob 1 macfarranch 1 -- Ranch Hand
+/givejob 1 macfarranch 2 -- Ranch Manager
 ```
 
 #### Monitoring & Maintenance

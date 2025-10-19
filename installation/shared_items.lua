@@ -6,4 +6,5 @@
     -----------------------------------------------
     -- ANIMAL PRODUCTS
     -----------------------------------------------
-    milk         = { name = 'milk',         label = 'Fresh Milk',    weight = 500,  type = 'item', image = 'milk.png',         unique = false, useable = true, shouldClose = true, description = 'fresh milk from cows' },
+    milk       = { name = 'milk',       label = 'Fresh Milk', weight = 500,  type = 'item', image = 'milk.png',      unique = false, useable = false, shouldClose = true, description = 'fresh milk from cows' },
+    fertilizer = { name = 'fertilizer', label = 'Fertilizer', weight = 500, type = 'item', image = 'fertilizer.png', unique = false, useable = false, shouldClose = true, description = 'good for your garden' },
