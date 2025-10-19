@@ -71,10 +71,7 @@ CreateThread(function()
                         local spawnedAnimal = NearAnimal(loadData)
                         
                         if spawnedAnimal and DoesEntityExist(spawnedAnimal) then
-                            spawnedAnimals[animalKey] = { 
-                                spawnedAnimal = spawnedAnimal
-                            }
-                            
+                            spawnedAnimals[animalKey] = { spawnedAnimal = spawnedAnimal }
                             -- Debug spawning
                             if Config.Debug then
                                 print('^2[ANIMAL DEBUG]^7 Spawned animal ' .. animalKey .. ' (entity: ' .. spawnedAnimal .. ') at distance ' .. math.floor(distance * 10) / 10 .. 'm')
@@ -150,7 +147,7 @@ function NearAnimal(loadData)
     
     -- Ensure scale is valid (between 0.1 and 2.0), handle NaN and invalid values
     local scale = tonumber(loadData.scale)
-    if not scale or scale ~= scale or scale <= 0 then -- Check for nil, NaN, or invalid values
+    if not scale or scale ~= scale or scale <= 0 then
         scale = 1.0
     else
         scale = math.min(math.max(scale, 0.1), 2.0)
@@ -331,10 +328,7 @@ RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
                 canBreed = false
                 table.insert(breedingIssues, 'Thirst too low (need ' .. Config.RequireThirstForBreeding .. '%)')
             end
-            
-            -- Skip client-side cooldown check - let server handle it
-            -- The server will properly validate cooldown timing during breeding attempts
-            
+
             if canBreed and #breedingIssues == 0 then
                 breedingStatus = 'Ready to Breed'
                 breedingDescription = 'All requirements met for breeding'
@@ -1119,7 +1113,6 @@ function GetTableLength(t)
     for _ in pairs(t) do count = count + 1 end
     return count
 end
-
 
 ---------------------------------------------
 -- find breeding partner (from animal info menu)
