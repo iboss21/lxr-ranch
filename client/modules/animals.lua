@@ -17,11 +17,7 @@ end)
 ---------------------------------------------
 -- force refresh animals from server
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:refreshAnimals', function()
-    if Config.Debug then
-        print('^3[ANIMAL DEBUG]^7 Force refresh triggered - clearing all spawned animals')
-    end
-    
+RegisterNetEvent('rex-ranch:client:refreshAnimals', function()  
     -- Clear all currently spawned animals
     for animalKey, animalData in pairs(spawnedAnimals) do
         if animalData and animalData.spawnedAnimal and DoesEntityExist(animalData.spawnedAnimal) then
@@ -32,12 +28,10 @@ RegisterNetEvent('rex-ranch:client:refreshAnimals', function()
             end
         end
     end
-    
     -- Clear all tracking data
     spawnedAnimals = {}
     followStates = {}
     spawningLocks = {}
-    
     -- Request fresh animal data from server
     TriggerServerEvent('rex-ranch:server:refreshAnimals')
 end)
@@ -777,6 +771,18 @@ RegisterNetEvent('rex-ranch:client:checkProducts', function(data)
     end
     
     RSGCore.Functions.TriggerCallback('rex-ranch:server:getAnimalProductionStatus', function(productionData)
+        if Config.Debug then
+            print('^3[CLIENT PRODUCTION DEBUG]^7 Production callback result for animal ' .. animalid .. ':')
+            if productionData then
+                print('^3[CLIENT PRODUCTION DEBUG]^7 - hasProduct: ' .. tostring(productionData.hasProduct))
+                print('^3[CLIENT PRODUCTION DEBUG]^7 - productName: ' .. tostring(productionData.productName))
+                print('^3[CLIENT PRODUCTION DEBUG]^7 - canProduce: ' .. tostring(productionData.canProduce))
+                print('^3[CLIENT PRODUCTION DEBUG]^7 - timeUntilNext: ' .. tostring(productionData.timeUntilNext))
+            else
+                print('^1[CLIENT PRODUCTION DEBUG]^7 - productionData is nil/false')
+            end
+        end
+        
         if not productionData then
             lib.notify({ title = 'No Production', description = 'This animal doesn\'t produce anything!', type = 'info' })
             return
@@ -845,6 +851,10 @@ RegisterNetEvent('rex-ranch:client:collectProduct', function(data)
     local animal = data.animal
     local animalid = data.animalid
     
+    if Config.Debug then
+        print('^3[CLIENT COLLECT DEBUG]^7 Starting collection animation for animal ' .. animalid)
+    end
+    
     -- Validate entities
     if not DoesEntityExist(cache.ped) or not DoesEntityExist(animal) then
         lib.notify({ title = 'Error', description = 'Invalid player or animal!', type = 'error' })
@@ -862,6 +872,10 @@ RegisterNetEvent('rex-ranch:client:collectProduct', function(data)
         ClearPedTasks(cache.ped)
         SetCurrentPedWeapon(cache.ped, `WEAPON_UNARMED`, true)
         FreezeEntityPosition(cache.ped, false)
+        if Config.Debug then
+            print('^3[CLIENT COLLECT DEBUG]^7 Sending collection request to server for animal ' .. animalid)
+        end
+        
         TriggerServerEvent('rex-ranch:server:collectProduct', animalid)
         LocalPlayer.state:set('inv_busy', false, true)
         isBusy = false

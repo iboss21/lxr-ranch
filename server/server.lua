@@ -319,19 +319,35 @@ RegisterNetEvent('rex-ranch:server:collectProduct', function(data)
         animalid = nil
     end
     
-    if not Player or not animalid then return end
+    if not Player or not animalid then
+        if Config.Debug then
+            print('^1[COLLECT ERROR]^7 Missing player or animalid - Player: ' .. tostring(Player) .. ', AnimalID: ' .. tostring(animalid))
+        end
+        return
+    end
     
-    -- Get animal data with error handling
+    -- Get animal data with comprehensive error handling
     local success, errorMsg = pcall(function()
-        MySQL.query('SELECT model, product_ready FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(result)
+        MySQL.query('SELECT model, product_ready, health, hunger, thirst FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(result)
             if not result or #result == 0 then
                 TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Animal not found!'})
+                if Config.Debug then
+                    print('^1[COLLECT ERROR]^7 Animal ' .. animalid .. ' not found in database')
+                end
                 return
             end
         
         local animal = result[1]
+        
+        if Config.Debug then
+            print('^3[COLLECT DEBUG]^7 Animal ' .. animalid .. ' collection attempt - product_ready: ' .. tostring(animal.product_ready))
+        end
+        
         if not animal.product_ready or animal.product_ready == 0 then
             TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'No product ready to collect!'})
+            if Config.Debug then
+                print('^3[COLLECT DEBUG]^7 Animal ' .. animalid .. ' has no product ready (product_ready: ' .. tostring(animal.product_ready) .. ')')
+            end
             return
         end
         
@@ -339,22 +355,51 @@ RegisterNetEvent('rex-ranch:server:collectProduct', function(data)
         local productConfig = Config.AnimalProducts[animal.model]
         if not productConfig then
             TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'This animal does not produce anything!'})
+            if Config.Debug then
+                print('^1[COLLECT ERROR]^7 No product config found for animal model: ' .. tostring(animal.model))
+            end
             return
         end
         
-        -- Give product to player
-        Player.Functions.AddItem(productConfig.product, productConfig.amount)
-        if RSGCore.Shared.Items[productConfig.product] then
-            TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[productConfig.product], 'add', productConfig.amount)
+        if Config.Debug then
+            print('^3[COLLECT DEBUG]^7 Attempting to give player ' .. src .. ' ' .. productConfig.amount .. 'x ' .. productConfig.product)
         end
         
-        -- Reset product ready status
-        MySQL.update('UPDATE rex_ranch_animals SET product_ready = 0 WHERE animalid = ?', {animalid})
-        
-        TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Collected ' .. productConfig.amount .. ' ' .. productConfig.product .. '!'})
-        
-        if Config.Debug then
-            print('^2[DEBUG]^7 Player ' .. src .. ' collected ' .. productConfig.product .. ' from animal ' .. animalid)
+        -- Give product to player with error handling
+        local itemAdded = Player.Functions.AddItem(productConfig.product, productConfig.amount)
+        if itemAdded then
+            if RSGCore.Shared.Items[productConfig.product] then
+                TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[productConfig.product], 'add', productConfig.amount)
+            end
+            
+            -- Reset product ready status with proper error handling
+            local resetSuccess, resetError = pcall(function()
+                return MySQL.update.await('UPDATE rex_ranch_animals SET product_ready = 0 WHERE animalid = ?', {animalid})
+            end)
+            
+            if resetSuccess and resetError and resetError > 0 then
+                TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Collected ' .. productConfig.amount .. ' ' .. productConfig.product .. '!'})
+                
+                -- Update client cache immediately
+                TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', src, animalid, {product_ready = 0})
+                
+                -- Trigger full refresh to update all clients
+                TriggerEvent('rex-ranch:server:refreshAnimals')
+                
+                if Config.Debug then
+                    print('^2[COLLECT SUCCESS]^7 Player ' .. src .. ' successfully collected ' .. productConfig.amount .. 'x ' .. productConfig.product .. ' from animal ' .. animalid)
+                end
+            else
+                if Config.Debug then
+                    print('^1[COLLECT ERROR]^7 Failed to reset product_ready status for animal ' .. animalid .. ' - Success: ' .. tostring(resetSuccess) .. ', Result: ' .. tostring(resetError))
+                end
+                TriggerClientEvent('ox_lib:notify', src, {type = 'warning', description = 'Product collected but status update failed!'})
+            end
+        else
+            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to add item to inventory!'})
+            if Config.Debug then
+                print('^1[COLLECT ERROR]^7 Failed to add ' .. productConfig.product .. ' to player ' .. src .. ' inventory')
+            end
         end
         end)
     end)
@@ -552,14 +597,36 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalProductionStatus', f
             (animal.health or 100) >= productConfig.requiresHealth and
             (animal.hunger or 100) >= productConfig.requiresHunger and
             (animal.thirst or 100) >= productConfig.requiresThirst
-        cb({
-            hasProduct = animal.product_ready == 1,
+            
+        -- Handle different data types for product_ready (boolean, integer, string)
+        local hasProduct = false
+        if animal.product_ready == 1 or animal.product_ready == '1' or animal.product_ready == true or animal.product_ready == 'true' then
+            hasProduct = true
+        end
+        
+        local responseData = {
+            hasProduct = hasProduct,
             productName = productConfig.product,
             productAmount = productConfig.amount,
             canProduce = canProduce,
             timeUntilNext = timeUntilNext,
             animalModel = animal.model
-        })
+        }
+        
+        if Config.Debug then
+            print('^3[SERVER PRODUCTION DEBUG]^7 getAnimalProductionStatus callback for animal ' .. animalid .. ':')
+            print('^3[SERVER PRODUCTION DEBUG]^7 - animalAge: ' .. animalAge .. ' (min: ' .. Config.MinAgeForProduction .. ')')
+            print('^3[SERVER PRODUCTION DEBUG]^7 - health: ' .. (animal.health or 100) .. '% (min: ' .. productConfig.requiresHealth .. '%)')
+            print('^3[SERVER PRODUCTION DEBUG]^7 - hunger: ' .. (animal.hunger or 100) .. '% (min: ' .. productConfig.requiresHunger .. '%)')
+            print('^3[SERVER PRODUCTION DEBUG]^7 - thirst: ' .. (animal.thirst or 100) .. '% (min: ' .. productConfig.requiresThirst .. '%)')
+            print('^3[SERVER PRODUCTION DEBUG]^7 - product_ready: ' .. tostring(animal.product_ready))
+            print('^3[SERVER PRODUCTION DEBUG]^7 - last_production: ' .. (animal.last_production or 0))
+            print('^3[SERVER PRODUCTION DEBUG]^7 - timeUntilNext: ' .. timeUntilNext)
+            print('^3[SERVER PRODUCTION DEBUG]^7 - canProduce: ' .. tostring(canProduce))
+            print('^3[SERVER PRODUCTION DEBUG]^7 - hasProduct: ' .. tostring(responseData.hasProduct))
+        end
+        
+        cb(responseData)
     end)
 end)
 
@@ -825,35 +892,68 @@ function ProcessAnimalSurvival()
                     
                     -- Check if enough time has passed for production
                     if (currentTime - lastProduction) >= productConfig.productionTime then
-                        MySQL.update('UPDATE rex_ranch_animals SET last_production = ?, product_ready = 1 WHERE animalid = ?', {
-                            currentTime, animal.animalid
-                        }, function(updateResult)
-                            -- updateResult can be a table with affectedRows or a number
-                            local rowsAffected = 0
-                            if type(updateResult) == 'table' then
-                                rowsAffected = updateResult.affectedRows or updateResult.changedRows or 0
-                            elseif type(updateResult) == 'number' then
-                                rowsAffected = updateResult
+                        if Config.Debug then
+                            print('^3[PRODUCTION DEBUG]^7 Animal ' .. animal.animalid .. ' meets production requirements:')
+                            print('^3[PRODUCTION DEBUG]^7 Age: ' .. animalAge .. ' (min: ' .. Config.MinAgeForProduction .. ')')
+                            print('^3[PRODUCTION DEBUG]^7 Health: ' .. (animal.health or 100) .. '% (min: ' .. productConfig.requiresHealth .. '%)')
+                            print('^3[PRODUCTION DEBUG]^7 Hunger: ' .. (animal.hunger or 100) .. '% (min: ' .. productConfig.requiresHunger .. '%)')
+                            print('^3[PRODUCTION DEBUG]^7 Thirst: ' .. (animal.thirst or 100) .. '% (min: ' .. productConfig.requiresThirst .. '%)')
+                            print('^3[PRODUCTION DEBUG]^7 Time since last production: ' .. (currentTime - lastProduction) .. 's (required: ' .. productConfig.productionTime .. 's)')
+                        end
+                        
+                        -- Use a more reliable update with better error handling
+                        local success, updateError = pcall(function()
+                            return MySQL.update.await('UPDATE rex_ranch_animals SET last_production = ?, product_ready = 1 WHERE animalid = ?', {
+                                currentTime, animal.animalid
+                            })
+                        end)
+                        
+                        if success and updateError and updateError > 0 then
+                            if Config.Debug then
+                                print('^2[PRODUCTION SUCCESS]^7 Animal ' .. animal.animalid .. ' (' .. animal.model .. ') produced ' .. productConfig.product .. ' (ready for collection)')
                             end
                             
-                            if rowsAffected > 0 then
-                                if Config.Debug then
-                                    print('^2[DEBUG]^7 Animal ' .. animal.animalid .. ' (' .. animal.model .. ') produced ' .. productConfig.product)
-                                end
-                                
-                                -- Update client-side production data
-                                if Config.UpdateClientsOnCron then
-                                    TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', -1, animal.animalid, {
-                                        last_production = currentTime,
-                                        product_ready = 1
-                                    })
-                                end
-                            else
-                                if Config.Debug then
-                                    print('^1[PRODUCTION ERROR]^7 Failed to update production status for animal ' .. animal.animalid)
-                                end
+                            -- Update client-side production data immediately
+                            if Config.UpdateClientsOnCron then
+                                TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', -1, animal.animalid, {
+                                    last_production = currentTime,
+                                    product_ready = 1
+                                })
                             end
-                        end)
+                            
+                            if Config.ServerNotify then
+                                print('^2[REX-RANCH PRODUCTION]^7 ' .. productConfig.product .. ' ready for collection from animal ' .. animal.animalid .. ' at ranch ' .. animal.ranchid)
+                            end
+                        else
+                            if Config.Debug then
+                                print('^1[PRODUCTION ERROR]^7 Failed to update production status for animal ' .. animal.animalid .. ' - Success: ' .. tostring(success) .. ', Result: ' .. tostring(updateError))
+                            end
+                        end
+                    else
+                        if Config.Debug then
+                            local remainingTime = productConfig.productionTime - (currentTime - lastProduction)
+                            print('^3[PRODUCTION DEBUG]^7 Animal ' .. animal.animalid .. ' not ready for production. Time remaining: ' .. remainingTime .. 's')
+                        end
+                    end
+                else
+                    if Config.Debug then
+                        local issues = {}
+                        if animalAge < Config.MinAgeForProduction then
+                            table.insert(issues, 'Too young (' .. animalAge .. 'd, need ' .. Config.MinAgeForProduction .. 'd)')
+                        end
+                        if (animal.health or 100) < productConfig.requiresHealth then
+                            table.insert(issues, 'Low health (' .. (animal.health or 100) .. '%, need ' .. productConfig.requiresHealth .. '%)')
+                        end
+                        if (animal.hunger or 100) < productConfig.requiresHunger then
+                            table.insert(issues, 'Low hunger (' .. (animal.hunger or 100) .. '%, need ' .. productConfig.requiresHunger .. '%)')
+                        end
+                        if (animal.thirst or 100) < productConfig.requiresThirst then
+                            table.insert(issues, 'Low thirst (' .. (animal.thirst or 100) .. '%, need ' .. productConfig.requiresThirst .. '%)')
+                        end
+                        
+                        if #issues > 0 then
+                            print('^3[PRODUCTION DEBUG]^7 Animal ' .. animal.animalid .. ' cannot produce: ' .. table.concat(issues, ', '))
+                        end
                     end
                 end
             end
@@ -1014,7 +1114,7 @@ function ProcessAnimalSurvival()
         end
         
         -- Print completion summary
-        if Config.ServerNotify then
+        if Config.Debug then
             if #animalsToRemove > 0 then
                 print('^2[REX-RANCH]^7 Animal survival check completed. ' .. #animals .. ' animals processed, ' .. #animalsToRemove .. ' animals died.')
             else
@@ -1056,196 +1156,6 @@ function ProcessAnimalSurvival()
         cronFailures = 0 -- Reset failure counter on success
     end
 end
-
----------------------------------------------
--- Manual animal survival test command (for debugging)
----------------------------------------------
-RegisterCommand('testanimalsurvival', function(source, args, rawCommand)
-    print('^3[REX-RANCH TEST]^7 Manual animal survival check triggered by admin')
-    
-    -- Test database connection first
-    MySQL.query('SELECT COUNT(*) as count FROM rex_ranch_animals', {}, function(result)
-        if not result or #result == 0 then
-            print('^1[REX-RANCH TEST]^7 Database query failed or returned no results')
-            return
-        end
-        
-        print('^2[REX-RANCH TEST]^7 Database connection OK. Found ' .. result[1].count .. ' animals in database')
-        
-        -- Run the animal survival logic manually
-        MySQL.query('SELECT animalid, model, born, health, thirst, hunger, last_production, product_ready, gender, pregnant, gestation_end_time, ranchid, pos_x, pos_y, pos_z, pos_w FROM rex_ranch_animals LIMIT 5', {}, function(animals)
-            if not animals or #animals == 0 then
-                print('^3[REX-RANCH TEST]^7 No animals found for testing')
-                return
-            end
-            
-            print('^2[REX-RANCH TEST]^7 Testing survival logic on ' .. #animals .. ' animals')
-            for i, animal in ipairs(animals) do
-                local animalAge = math.floor((os.time() - animal.born) / (24 * 60 * 60))
-                print('^3[REX-RANCH TEST]^7 Animal ' .. i .. ': ID=' .. animal.animalid .. ', Age=' .. animalAge .. 'd, Health=' .. (animal.health or 'NULL') .. ', Hunger=' .. (animal.hunger or 'NULL') .. ', Thirst=' .. (animal.thirst or 'NULL'))
-            end
-        end)
-    end)
-end, true) -- restricted to admins
-
----------------------------------------------
--- Test animal removal (for debugging)
----------------------------------------------
-RegisterCommand('testremoval', function(source, args, rawCommand)
-    local animalid = args[1]
-    if not animalid then
-        print('^1[REX-RANCH TEST]^7 Usage: /testremoval <animalid>')
-        return
-    end
-    
-    print('^3[REX-RANCH TEST]^7 Testing removal of animal: ' .. animalid)
-    
-    -- Check if animal exists first
-    MySQL.query('SELECT animalid FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(result)
-        if not result or #result == 0 then
-            print('^1[REX-RANCH TEST]^7 Animal ' .. animalid .. ' not found in database')
-            return
-        end
-        
-        print('^2[REX-RANCH TEST]^7 Animal found in database. Testing removal...')
-        
-        -- Trigger client removal immediately
-        print('^3[REX-RANCH TEST]^7 Sending client removal event for animal ' .. animalid)
-        TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animalid)
-        
-        -- Also remove from database
-        MySQL.execute('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(deleteResult)
-            local rowsAffected = 0
-            if type(deleteResult) == 'table' then
-                rowsAffected = deleteResult.affectedRows or deleteResult.changedRows or 0
-            elseif type(deleteResult) == 'number' then
-                rowsAffected = deleteResult
-            end
-            
-            if rowsAffected > 0 then
-                print('^2[REX-RANCH TEST]^7 Successfully removed animal ' .. animalid .. ' from database')
-            else
-                print('^1[REX-RANCH TEST]^7 Failed to remove animal ' .. animalid .. ' from database')
-            end
-        end)
-        
-        -- Trigger refresh after a delay
-        SetTimeout(2000, function()
-            print('^3[REX-RANCH TEST]^7 Triggering animal refresh')
-            TriggerEvent('rex-ranch:server:refreshAnimals')
-        end)
-    end)
-end, true) -- restricted to admins
-
----------------------------------------------
--- Check cronjob status
----------------------------------------------
-RegisterCommand('cronstat', function(source, args, rawCommand)
-    local currentTime = os.time()
-    local timeSinceLastRun = currentTime - lastCronRun
-    
-    print('^3[REX-RANCH CRON STATUS]^7 === Cronjob Status ===')
-    print('^3[REX-RANCH CRON STATUS]^7 Schedule: ' .. Config.AnimalCronJob)
-    print('^3[REX-RANCH CRON STATUS]^7 Debug Mode: ' .. tostring(Config.Debug))
-    print('^3[REX-RANCH CRON STATUS]^7 Failure Count: ' .. cronFailures)
-    
-    if lastCronRun == 0 then
-        print('^1[REX-RANCH CRON STATUS]^7 Status: Never run since server start')
-    else
-        print('^2[REX-RANCH CRON STATUS]^7 Last Run: ' .. os.date('%Y-%m-%d %H:%M:%S', lastCronRun))
-        print('^2[REX-RANCH CRON STATUS]^7 Minutes Since Last Run: ' .. math.floor(timeSinceLastRun / 60))
-        
-        local expectedInterval = 60 -- 1 minute for testing
-        if Config.AnimalCronJob == '0 * * * *' then
-            expectedInterval = 3600 -- 1 hour for production
-        end
-        
-        if timeSinceLastRun > (expectedInterval * 2) then
-            print('^1[REX-RANCH CRON STATUS]^7 Status: STOPPED (overdue)')
-        else
-            print('^2[REX-RANCH CRON STATUS]^7 Status: Running normally')
-        end
-    end
-    
-    print('^3[REX-RANCH CRON STATUS]^7 === End Status ===')
-end, true) -- restricted to admins
-
----------------------------------------------
--- Kill animal command (for testing)
----------------------------------------------
-RegisterCommand('killanimal', function(source, args, rawCommand)
-    local animalid = args[1]
-    if not animalid then
-        print('^1[REX-RANCH TEST]^7 Usage: /killanimal <animalid>')
-        return
-    end
-    
-    print('^3[REX-RANCH TEST]^7 Setting animal health to 0: ' .. animalid)
-    
-    -- Set animal health to 0 to trigger death
-    MySQL.update('UPDATE rex_ranch_animals SET health = 0 WHERE animalid = ?', {animalid}, function(result)
-        local rowsAffected = 0
-        if type(result) == 'table' then
-            rowsAffected = result.affectedRows or result.changedRows or 0
-        elseif type(result) == 'number' then
-            rowsAffected = result
-        end
-        
-        if rowsAffected > 0 then
-            print('^2[REX-RANCH TEST]^7 Successfully set animal ' .. animalid .. ' health to 0')
-            print('^3[REX-RANCH TEST]^7 Run /testanimalsurvival to trigger death processing')
-        else
-            print('^1[REX-RANCH TEST]^7 Failed to update animal ' .. animalid .. ' or animal not found')
-        end
-    end)
-end, true) -- restricted to admins
-
----------------------------------------------
--- Manual dead animal cleanup command
----------------------------------------------
-RegisterCommand('cleandead', function(source, args, rawCommand)
-    print('^3[REX-RANCH CLEANUP]^7 Manual dead animal cleanup triggered')
-    
-    -- Find all animals with 0 health
-    MySQL.query('SELECT animalid, health FROM rex_ranch_animals WHERE health <= 0', {}, function(deadAnimals)
-        if not deadAnimals or #deadAnimals == 0 then
-            print('^2[REX-RANCH CLEANUP]^7 No dead animals found in database')
-            return
-        end
-        
-        print('^3[REX-RANCH CLEANUP]^7 Found ' .. #deadAnimals .. ' dead animals to clean up')
-        
-        local cleanupCount = 0
-        for _, animal in ipairs(deadAnimals) do
-            -- Remove from database
-            local deleteResult = MySQL.execute.await('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animal.animalid})
-            
-            if deleteResult and deleteResult > 0 then
-                -- Remove from all clients
-                TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animal.animalid)
-                cleanupCount = cleanupCount + 1
-                print('^2[REX-RANCH CLEANUP]^7 Cleaned up dead animal: ' .. animal.animalid)
-                Wait(100) -- Small delay between removals
-            end
-        end
-        
-        if cleanupCount > 0 then
-            -- Refresh animals after cleanup
-            Wait(500)
-            TriggerEvent('rex-ranch:server:refreshAnimals')
-            print('^2[REX-RANCH CLEANUP]^7 Cleanup complete. Removed ' .. cleanupCount .. ' dead animals')
-        end
-    end)
-end, true) -- restricted to admins
-
----------------------------------------------
--- Force refresh all animals (removes orphaned entities)
----------------------------------------------
-RegisterCommand('refreshanimals', function(source, args, rawCommand)
-    print('^3[REX-RANCH]^7 Force refreshing all animals for all players')
-    TriggerClientEvent('rex-ranch:client:refreshAnimals', -1)
-    TriggerEvent('rex-ranch:server:refreshAnimals')
-end, true) -- restricted to admins
 
 ---------------------------------------------
 -- Helper function to validate breeding requirements
@@ -1587,7 +1497,9 @@ local function GetAgeCategory(age)
     end
 end
 
+---------------------------------------------
 -- Get nearby animals available for sale at current sale point
+---------------------------------------------
 RSGCore.Functions.CreateCallback('rex-ranch:server:getNearbyAnimalsForSale', function(src, cb, ranchid, salePointCoords)
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player or not ranchid then 
@@ -1673,7 +1585,9 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getNearbyAnimalsForSale', fun
     end)
 end)
 
+---------------------------------------------
 -- Sell animal
+---------------------------------------------
 RegisterNetEvent('rex-ranch:server:sellAnimal', function(animalid, expectedPrice, salePointCoords)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)

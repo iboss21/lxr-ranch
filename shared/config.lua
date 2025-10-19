@@ -30,7 +30,7 @@ Config.RanchStorageMaxSlots = 100
 Config.AnimalDistanceSpawn = 50.0
 Config.AnimalFadeIn = true
 Config.ServerNotify = true
-Config.AnimalCronJob = '*/15 * * * *' -- every 5 minutes (for testing), change to '0 * * * *' for hourly
+Config.AnimalCronJob = '*/15 * * * *' -- every 15 minutes
 Config.MaxRanchAnimals = 10
 Config.UpdateClientsOnCron = true -- Update client animal data when cronjob runs
 Config.RefreshAfterCron = true -- Full refresh of animal data after cronjob completion
@@ -40,7 +40,7 @@ Config.RefreshAfterCron = true -- Full refresh of animal data after cronjob comp
 ---------------------------------
 Config.HungerDecayRate = 1 -- hunger reduction per cronjob run
 Config.ThirstDecayRate = 1 -- thirst reduction per cronjob run
-Config.HealthDecayRate = 5 -- health reduction per cronjob run when starving/dehydrated
+Config.HealthDecayRate = 1 -- health reduction per cronjob run when starving/dehydrated
 Config.MinSurvivalStats = 0 -- minimum hunger/thirst before health starts decaying
 Config.FeedItem = 'animal_feed' -- item required to feed animals
 Config.WaterItem = 'water_bucket' -- item required to water animals
@@ -100,7 +100,7 @@ Config.BaseSellPrices = {
 
 -- Sale point settings
 Config.AnimalSaleDistance = 15.0 -- Distance animal must be within sale point to sell
-Config.RequireAnimalPresent = false -- Set to false to disable physical animal requirement (temporarily disabled for testing)
+Config.RequireAnimalPresent = true -- Set to false to disable physical animal requirement (temporarily disabled for testing)
 Config.TransportMode = true -- Keep animals spawned when being herded, regardless of distance
 
 -- Buy point settings
@@ -112,13 +112,13 @@ Config.BuyPointSpawnDistance = 8.0 -- Distance from buy point where animals can 
 ---------------------------------
 Config.ProductionEnabled = true
 Config.ProductionCheckInterval = 3600 -- seconds (1 hour)
-Config.MinAgeForProduction = 2 -- days old before animals can produce
+Config.MinAgeForProduction = 5 -- days old before animals can produce (set to 0 for testing)
 
 ---------------------------------
 -- animal breeding settings
 ---------------------------------
 Config.BreedingEnabled = true
-Config.MinAgeForBreeding = 2 -- days old before animals can breed (more realistic)
+Config.MinAgeForBreeding = 5 -- days old before animals can breed (more realistic)
 Config.MaxBreedingAge = 30 -- days old after which animals can't breed (extended for more breeding time)
 Config.BreedingDistance = 10.0 -- maximum distance between animals to breed
 Config.BreedingCooldown = 172800 -- 2 days in seconds before animal can breed again
@@ -159,7 +159,7 @@ Config.BreedingConfig = {
 Config.AnimalProducts = {
     ['a_c_bull_01'] = {
         product = 'fertilizer',
-        productionTime = 3600, -- every hour in seconds
+        productionTime = 3600, -- every 1 hour in seconds
         amount = 1,
         requiresHealth = 60, -- minimum health to produce
         requiresHunger = 40, -- minimum hunger to produce
@@ -167,7 +167,7 @@ Config.AnimalProducts = {
     },
     ['a_c_cow'] = {
         product = 'milk',
-        productionTime = 3600, -- every hour in seconds
+        productionTime = 3600, -- every 1 hour in seconds
         amount = 1,
         requiresHealth = 60, -- minimum health to produce
         requiresHunger = 40, -- minimum hunger to produce
