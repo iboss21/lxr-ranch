@@ -84,7 +84,9 @@ Config.PrimeAgeStart = 6 -- age when animals are considered prime
 Config.PrimeAgeEnd = 30 -- age when animals are no longer prime
 Config.OldAgeStart = 31 -- age when animals are considered old
 
+---------------------------------
 -- Age-based pricing multipliers
+---------------------------------
 Config.AgePricing = {
     young = 0.5,     -- animals below prime age (50% of base price)
     prime = 1.5,     -- animals in prime age (150% of base price)
@@ -92,20 +94,25 @@ Config.AgePricing = {
     old   = 0.7      -- old animals (70% of base price)
 }
 
+---------------------------------
 -- Base selling prices (will be modified by age multipliers)
+---------------------------------
 Config.BaseSellPrices = {
     ['a_c_bull_01'] = 400,
     ['a_c_cow'] = 150
 }
 
+---------------------------------
 -- Sale point settings
+---------------------------------
 Config.AnimalSaleDistance = 15.0 -- Distance animal must be within sale point to sell
 Config.RequireAnimalPresent = true -- Set to false to disable physical animal requirement (temporarily disabled for testing)
 Config.TransportMode = true -- Keep animals spawned when being herded, regardless of distance
 
--- Buy point settings
-Config.BuyPointSpawnDistance = 8.0 -- Distance from buy point where animals can spawn
 ---------------------------------
+-- Buy point settings
+---------------------------------
+Config.BuyPointSpawnDistance = 8.0 -- Distance from buy point where animals can spawn
 
 ---------------------------------
 -- animal production settings
@@ -121,41 +128,67 @@ Config.BreedingEnabled = true
 Config.MinAgeForBreeding = 5 -- days old before animals can breed (more realistic)
 Config.MaxBreedingAge = 30 -- days old after which animals can't breed (extended for more breeding time)
 Config.BreedingDistance = 10.0 -- maximum distance between animals to breed
-Config.BreedingCooldown = 172800 -- 2 days in seconds before animal can breed again
+Config.BreedingCooldown = 86400 -- 1 days in seconds before animal can breed again (default for cows)
 Config.RequireHealthForBreeding = 70 -- minimum health required for breeding
+
+---------------------------------
+-- Gender-specific breeding cooldowns
+---------------------------------
+Config.GenderSpecificCooldowns = {
+    male = 3600,    -- 1 hour cooldown for males (bulls can breed more frequently)
+    female = 86400 -- 24 hours (1 days) cooldown for females (cows need more recovery time)
+}
 Config.RequireHungerForBreeding = 50 -- minimum hunger required for breeding
 Config.RequireThirstForBreeding = 50 -- minimum thirst required for breeding
 
+---------------------------------
 -- Automatic breeding settings
+---------------------------------
 Config.AutomaticBreedingEnabled = true -- Enable automatic breeding between compatible animals
 Config.AutomaticBreedingCheckInterval = 60 -- Check interval in seconds (1 minute for testing)
 Config.AutomaticBreedingMaxDistance = 5.0 -- Maximum distance for automatic breeding (shorter than manual)
 Config.AutomaticBreedingNotifications = true -- Send notifications to ranch owners when automatic breeding occurs
 
+---------------------------------
 -- Gender ratios when buying animals (chance of male)
+---------------------------------
 Config.GenderRatios = {
     ['a_c_bull_01'] = 1.0, -- 100% chance of male (it's specifically a bull)
     ['a_c_cow'] = 0.0      -- 0% chance of male, 100% chance of female (cows are always female)
 }
 
+---------------------------------
 -- Breeding configurations per animal type
+---------------------------------
 Config.BreedingConfig = {
     ['a_c_bull_01'] = {
         gestationPeriod = 259200,    -- 3 days in seconds (same as cows, represents 9 months)
         offspringCount = { min = 1, max = 1 }, -- always 1 calf
         breedingSeasonStart = 1,     -- year-round breeding
         breedingSeasonEnd = 365,
-        enabled = true
+        enabled = true,
+        -- Bulls can't give birth, but if they somehow did, offspring would be cows
+        offspringModels = {
+            { model = 'a_c_cow', chance = 100 } -- 100% chance of cow offspring
+        }
     },
     ['a_c_cow'] = {
         gestationPeriod = 259200,    -- 3 days in seconds (represents 9 months)
         offspringCount = { min = 1, max = 1 }, -- always 1 calf
         breedingSeasonStart = 1,     -- day of year (1-365)
         breedingSeasonEnd = 365,     -- year-round breeding
-        enabled = true
+        enabled = true,
+        -- Cows can give birth to either female calves (cows) or male calves (bulls)
+        offspringModels = {
+            { model = 'a_c_cow', chance = 50 },     -- 50% chance of female calf
+            { model = 'a_c_bull_01', chance = 50 }  -- 50% chance of male calf
+        }
     },
 }
 
+---------------------------------
+-- Animal Products
+---------------------------------
 Config.AnimalProducts = {
     ['a_c_bull_01'] = {
         product = 'fertilizer',
@@ -174,7 +207,6 @@ Config.AnimalProducts = {
         requiresThirst = 40  -- minimum thirst to produce
     }
 }
----------------------------------
 
 ---------------------------------
 -- ranch locations

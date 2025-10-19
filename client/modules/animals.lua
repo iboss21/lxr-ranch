@@ -8,6 +8,33 @@ local spawningLocks = {} -- Track animals currently being spawned to prevent dup
 lib.locale()
 
 ---------------------------------------------
+-- helper function to finalize animal menu display
+---------------------------------------------
+local function finalizeAnimalMenu(menuOptions, freshData, animal)
+    -- Add separator and actions
+    table.insert(menuOptions, {
+        title = '─────────────────────────',
+        disabled = true
+    })
+    table.insert(menuOptions, {
+        title = 'Animal Actions',
+        description = 'Care for your animal',
+        icon = 'fa-solid fa-hand-holding-heart',
+        event = 'rex-ranch:client:actionsmenu',
+        args = { animalid = freshData.animalid, animal = animal },
+        arrow = true
+    })
+    
+    -- Display the menu
+    lib.registerContext({
+        id = 'animal_info_menu',
+        title = 'Ranch Animal #'..freshData.animalid,
+        options = menuOptions
+    })
+    lib.showContext('animal_info_menu')
+end
+
+---------------------------------------------
 -- on player load refresh animals
 ---------------------------------------------
 RegisterNetEvent('RSGCore:Client:OnPlayerLoaded', function()
@@ -444,124 +471,130 @@ RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
         }
     }
     
-    -- Add breeding status for female animals only
-    if Config.BreedingEnabled and freshData.gender == 'female' then
-        local breedingOption = {
-            title = 'Breeding: '..breedingStatus,
-            description = breedingDescription,
-            icon = (freshData.pregnant == 1 or freshData.pregnant == true) and 'fa-solid fa-baby' or 'fa-solid fa-venus',
-            disabled = false
-        }
+    -- Get detailed breeding status from server (includes cooldown information)
+    if Config.BreedingEnabled and (freshData.gender == 'female' or freshData.gender == 'male') then
+        RSGCore.Functions.TriggerCallback('rex-ranch:server:getBreedingStatus', function(breedingData)
+            local breedingOption = nil
         
-        -- Add pregnancy progress bar if animal is pregnant
-        if (freshData.pregnant == 1 or freshData.pregnant == true) and freshData.gestation_end_time then
-            -- Get pregnancy progress from server before displaying menu
+        if breedingData.status == 'pregnant' then
+            -- Get pregnancy progress for pregnant animals
             RSGCore.Functions.TriggerCallback('rex-ranch:server:getPregnancyProgress', function(progressData)
                 if progressData and progressData.isPregnant then
-                    breedingOption.progress = progressData.progressPercent
-                    breedingOption.colorScheme = 'blue'
-                    breedingOption.description = progressData.description
+                    breedingOption = {
+                        title = 'Breeding: Pregnant',
+                        description = progressData.description,
+                        icon = 'fa-solid fa-baby',
+                        progress = progressData.progressPercent,
+                        colorScheme = 'blue',
+                        disabled = false
+                    }
                 else
-                    -- Fallback if server callback fails
-                    breedingOption.description = 'Pregnant - calculating progress...'
+                    breedingOption = {
+                        title = 'Breeding: Pregnant',
+                        description = 'Expecting offspring soon',
+                        icon = 'fa-solid fa-baby',
+                        disabled = false
+                    }
                 end
                 
-                -- Update the breeding option
                 table.insert(menuOptions, breedingOption)
                 
-                -- Add breeding partner option for eligible animals
-                if canBreed and freshData.gender then
-                    local buttonTitle = 'Find Breeding Partner'
-                    local buttonDesc = 'Look for compatible animals to breed with'
-                    
-                    -- Customize button text based on gender
-                    if freshData.gender == 'male' then
-                        buttonDesc = 'Find female animals to breed with'
-                    elseif freshData.gender == 'female' then
-                        buttonDesc = 'Find male animals to breed with'
-                    end
-                    
-                    table.insert(menuOptions, {
-                        title = buttonTitle,
-                        description = buttonDesc,
-                        icon = 'fa-solid fa-search',
-                        event = 'rex-ranch:client:findBreedingPartner',
-                        args = { animalid = freshData.animalid, animal = animal }
-                    })
+                -- Complete the menu display
+                finalizeAnimalMenu(menuOptions, freshData, animal)
+            end, freshData.animalid)
+            return
+        elseif breedingData.status == 'cooldown' then
+            breedingOption = {
+                title = 'Breeding: Cooldown',
+                description = breedingData.message,
+                icon = 'fa-solid fa-clock',
+                disabled = false
+            }
+            
+            -- Add progress bar for cooldown if we have time remaining info
+            if breedingData.timeRemaining and breedingData.timeRemaining > 0 then
+                -- Use gender-specific cooldown for progress calculation
+                local totalCooldown
+                if Config.GenderSpecificCooldowns and freshData.gender then
+                    totalCooldown = Config.GenderSpecificCooldowns[freshData.gender]
                 end
                 
-                -- Add separator and actions
-                table.insert(menuOptions, {
-                    title = '─────────────────────────',
-                    disabled = true
-                })
-                table.insert(menuOptions, {
-                    title = 'Animal Actions',
-                    description = 'Care for your animal',
-                    icon = 'fa-solid fa-hand-holding-heart',
-                    event = 'rex-ranch:client:actionsmenu',
-                    args = { animalid = freshData.animalid, animal = animal },
-                    arrow = true
-                })
+                -- Fallback to default cooldown
+                if not totalCooldown or totalCooldown == 0 then
+                    totalCooldown = Config.BreedingCooldown or 172800 -- 2 days default
+                end
                 
-                -- Display the menu with updated pregnancy progress
-                lib.registerContext({
-                    id = 'animal_info_menu',
-                    title = 'Animal #'..freshData.animalid,
-                    options = menuOptions
-                })
-                lib.showContext('animal_info_menu')
-            end, freshData.animalid)
+                if totalCooldown > 0 then
+                    local elapsedTime = totalCooldown - breedingData.timeRemaining
+                    local progressPercent = math.max(0, math.min(100, (elapsedTime / totalCooldown) * 100))
+                    
+                    breedingOption.progress = progressPercent
+                    breedingOption.colorScheme = 'orange'
+                else
+                    -- Fallback if cooldown config is invalid
+                    breedingOption.progress = 50
+                    breedingOption.colorScheme = 'orange'
+                end
+            end
+        elseif breedingData.status == 'ready' then
+            breedingOption = {
+                title = 'Breeding: Ready',
+                description = breedingData.message,
+                icon = freshData.gender == 'male' and 'fa-solid fa-mars' or 'fa-solid fa-venus',
+                disabled = false
+            }
             
-            -- Don't add the breeding option yet - wait for callback
+            -- Add breeding partner button for ready animals
+            local buttonTitle = 'Find Breeding Partner'
+            local buttonDesc = 'Look for compatible animals to breed with'
+            
+            if freshData.gender == 'male' then
+                buttonDesc = 'Find female animals to breed with'
+            elseif freshData.gender == 'female' then
+                buttonDesc = 'Find male animals to breed with'
+            end
+            
+            table.insert(menuOptions, breedingOption)
+            table.insert(menuOptions, {
+                title = buttonTitle,
+                description = buttonDesc,
+                icon = 'fa-solid fa-search',
+                event = 'rex-ranch:client:findBreedingPartner',
+                args = { animalid = freshData.animalid, animal = animal }
+            })
+            
+            -- Complete the menu display
+            finalizeAnimalMenu(menuOptions, freshData, animal)
             return
+        else
+            -- Handle other statuses (disabled, too_young, too_old, requirements_not_met, error)
+            local statusTitles = {
+                disabled = 'Disabled',
+                too_young = 'Too Young',
+                too_old = 'Too Old',
+                requirements_not_met = 'Not Ready',
+                error = 'Error'
+            }
+            
+            breedingOption = {
+                title = 'Breeding: ' .. (statusTitles[breedingData.status] or 'Unknown'),
+                description = breedingData.message,
+                icon = 'fa-solid fa-exclamation-circle',
+                disabled = false
+            }
         end
         
-        table.insert(menuOptions, breedingOption)
-    end
-    
-    -- Add breeding partner option for eligible animals (both male and female)
-    -- Males can breed with females, females can breed with males
-    if Config.BreedingEnabled and canBreed and freshData.gender then
-        local buttonTitle = 'Find Breeding Partner'
-        local buttonDesc = 'Look for compatible animals to breed with'
-        
-        -- Customize button text based on gender
-        if freshData.gender == 'male' then
-            buttonDesc = 'Find female animals to breed with'
-        elseif freshData.gender == 'female' then
-            buttonDesc = 'Find male animals to breed with'
+        if breedingOption then
+            table.insert(menuOptions, breedingOption)
         end
         
-        table.insert(menuOptions, {
-            title = buttonTitle,
-            description = buttonDesc,
-            icon = 'fa-solid fa-search',
-            event = 'rex-ranch:client:findBreedingPartner',
-            args = { animalid = freshData.animalid, animal = animal }
-        })
-    end
-    
-    -- Add separator and actions
-    table.insert(menuOptions, {
-        title = '─────────────────────────',
-        disabled = true
-    })
-    table.insert(menuOptions, {
-        title = 'Animal Actions',
-        description = 'Care for your animal',
-        icon = 'fa-solid fa-hand-holding-heart',
-        event = 'rex-ranch:client:actionsmenu',
-        args = { animalid = freshData.animalid, animal = animal },
-        arrow = true
-    })
-    
-    lib.registerContext({
-        id = 'animal_info_menu',
-        title = 'Ranch Animal #'..freshData.animalid,
-        options = menuOptions
-    })
-    lib.showContext('animal_info_menu')
+        -- Complete the menu display
+        finalizeAnimalMenu(menuOptions, freshData, animal)
+    end, freshData.animalid)
+else
+    -- Animal doesn't qualify for breeding or breeding is disabled
+    finalizeAnimalMenu(menuOptions, freshData, animal)
+end
 end)
 
 ---------------------------------------------
@@ -1155,7 +1188,7 @@ RegisterNetEvent('rex-ranch:client:findBreedingPartner', function(data)
             },
             {
                 title = '─────────────────────────',
-                disabled = true
+                disabled = false
             }
         }
         

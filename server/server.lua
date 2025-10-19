@@ -18,6 +18,64 @@ RegisterNetEvent('rex-ranch:server:ranchstorage', function(data)
 end)
 
 ---------------------------------------------
+-- get gender-specific breeding cooldown
+---------------------------------------------
+local function GetBreedingCooldown(gender)
+    if Config.GenderSpecificCooldowns and Config.GenderSpecificCooldowns[gender] then
+        return Config.GenderSpecificCooldowns[gender]
+    end
+    
+    -- Fallback to default cooldown
+    return Config.BreedingCooldown or 172800
+end
+
+---------------------------------------------
+-- select offspring model based on breeding config probabilities
+---------------------------------------------
+local function SelectOffspringModel(parentModel)
+    local breedingConfig = Config.BreedingConfig[parentModel]
+    if not breedingConfig or not breedingConfig.offspringModels then
+        -- Fallback: return same model as parent
+        return parentModel
+    end
+    
+    local offspringModels = breedingConfig.offspringModels
+    if #offspringModels == 0 then
+        return parentModel
+    end
+    
+    -- Calculate total chance for normalization
+    local totalChance = 0
+    for _, offspring in ipairs(offspringModels) do
+        totalChance = totalChance + offspring.chance
+    end
+    
+    if totalChance == 0 then
+        return parentModel
+    end
+    
+    -- Generate random number and select model
+    local randomValue = math.random() * totalChance
+    local currentChance = 0
+    
+    for _, offspring in ipairs(offspringModels) do
+        currentChance = currentChance + offspring.chance
+        if randomValue <= currentChance then
+            if Config.Debug then
+                print('^3[BREEDING DEBUG]^7 Selected offspring model: ' .. offspring.model .. ' (chance: ' .. offspring.chance .. '/' .. totalChance .. ')')
+            end
+            return offspring.model
+        end
+    end
+    
+    -- Fallback: return the first model
+    if Config.Debug then
+        print('^1[BREEDING ERROR]^7 Failed to select offspring model, using first option: ' .. offspringModels[1].model)
+    end
+    return offspringModels[1].model
+end
+
+---------------------------------------------
 -- create unique animalid
 ---------------------------------------------
 local function CreateAnimalId()
@@ -565,6 +623,106 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getPregnancyProgress', functi
 end)
 
 ---------------------------------------------
+-- get detailed breeding status including cooldowns
+---------------------------------------------
+RSGCore.Functions.CreateCallback('rex-ranch:server:getBreedingStatus', function(src, cb, animalid)
+    local Player = RSGCore.Functions.GetPlayer(src)
+    if not Player or not animalid then 
+        cb({status = 'error', message = 'Invalid request'})
+        return 
+    end
+    
+    MySQL.query('SELECT model, gender, age, pregnant, breeding_ready_time, health, hunger, thirst, born FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(result)
+        if not result or #result == 0 then
+            cb({status = 'error', message = 'Animal not found'})
+            return
+        end
+        
+        local animal = result[1]
+        local currentTime = os.time()
+        local animalAge = math.floor((currentTime - animal.born) / (24 * 60 * 60))
+        
+        -- Check if breeding is enabled
+        if not Config.BreedingEnabled then
+            cb({status = 'disabled', message = 'Breeding system is disabled'})
+            return
+        end
+        
+        -- Check pregnancy status
+        local isPregnant = (animal.pregnant == 1 or animal.pregnant == true or animal.pregnant == 'true')
+        if isPregnant then
+            cb({status = 'pregnant', message = 'Animal is pregnant'})
+            return
+        end
+        
+        -- Check age requirements
+        if Config.MinAgeForBreeding and animalAge < Config.MinAgeForBreeding then
+            cb({status = 'too_young', message = 'Too young to breed (need ' .. Config.MinAgeForBreeding .. ' days, currently ' .. animalAge .. ' days)'})
+            return
+        end
+        
+        if Config.MaxBreedingAge and animalAge > Config.MaxBreedingAge then
+            cb({status = 'too_old', message = 'Too old to breed (max ' .. Config.MaxBreedingAge .. ' days, currently ' .. animalAge .. ' days)'})
+            return
+        end
+        
+        -- Check health requirements
+        local issues = {}
+        if Config.RequireHealthForBreeding and (animal.health or 100) < Config.RequireHealthForBreeding then
+            table.insert(issues, 'Health too low (need ' .. Config.RequireHealthForBreeding .. '%, currently ' .. (animal.health or 100) .. '%)')
+        end
+        
+        if Config.RequireHungerForBreeding and (animal.hunger or 100) < Config.RequireHungerForBreeding then
+            table.insert(issues, 'Hunger too low (need ' .. Config.RequireHungerForBreeding .. '%, currently ' .. (animal.hunger or 100) .. '%)')
+        end
+        
+        if Config.RequireThirstForBreeding and (animal.thirst or 100) < Config.RequireThirstForBreeding then
+            table.insert(issues, 'Thirst too low (need ' .. Config.RequireThirstForBreeding .. '%, currently ' .. (animal.thirst or 100) .. '%)')
+        end
+        
+        if #issues > 0 then
+            cb({status = 'requirements_not_met', message = table.concat(issues, ', ')})
+            return
+        end
+        
+        -- Check breeding cooldown (handle different data types)
+        local breedingReadyTime = tonumber(animal.breeding_ready_time) or 0
+        
+        if Config.Debug then
+            print('^3[BREEDING DEBUG]^7 Animal ' .. animalid .. ' cooldown check:')
+            print('^3[BREEDING DEBUG]^7 - breeding_ready_time: ' .. tostring(animal.breeding_ready_time) .. ' (normalized: ' .. breedingReadyTime .. ')')
+            print('^3[BREEDING DEBUG]^7 - current_time: ' .. currentTime)
+            print('^3[BREEDING DEBUG]^7 - cooldown active: ' .. tostring(breedingReadyTime > 0 and breedingReadyTime > currentTime))
+        end
+        
+        if breedingReadyTime > 0 and breedingReadyTime > currentTime then
+            local timeRemaining = breedingReadyTime - currentTime
+            local hoursRemaining = math.floor(timeRemaining / 3600)
+            local minutesRemaining = math.floor((timeRemaining % 3600) / 60)
+            
+            local cooldownMessage = 'Breeding cooldown active. '
+            if hoursRemaining > 0 then
+                cooldownMessage = cooldownMessage .. hoursRemaining .. 'h ' .. minutesRemaining .. 'm remaining'
+            else
+                cooldownMessage = cooldownMessage .. minutesRemaining .. 'm remaining'
+            end
+            
+            cb({
+                status = 'cooldown', 
+                message = cooldownMessage,
+                timeRemaining = timeRemaining,
+                hoursRemaining = hoursRemaining,
+                minutesRemaining = minutesRemaining
+            })
+            return
+        end
+        
+        -- Animal is ready to breed
+        cb({status = 'ready', message = 'Ready to breed'})
+    end)
+end)
+
+---------------------------------------------
 -- get animal production status
 ---------------------------------------------
 RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalProductionStatus', function(src, cb, animalid)
@@ -671,7 +829,7 @@ CreateThread(function()
         local timeSinceLastRun = currentTime - lastCronRun
         
         -- Determine expected interval based on cron configuration
-        local expectedInterval = 15
+        local expectedInterval = 15 -- Default for testing (15 seconds)
         if Config.AnimalCronJob == '*/15 * * * *' then
             expectedInterval = 900 -- 15 minutes for production
         elseif Config.AnimalCronJob == '0 * * * *' then
@@ -780,6 +938,7 @@ function ProcessAnimalSurvival()
                         local success, breedingError = pcall(function()
                         -- Determine number of offspring
                         local offspringCount = math.random(breedingConfig.offspringCount.min, breedingConfig.offspringCount.max)
+                        local offspringTypes = {} -- Track offspring types for notification
                         
                         -- Spawn offspring near the mother
                         for i = 1, offspringCount do
@@ -789,7 +948,23 @@ function ProcessAnimalSurvival()
                                 goto skipOffspring
                             end
                             
-                            local offspringGender = math.random() < 0.5 and 'male' or 'female'
+                            -- Select offspring model based on breeding config probabilities
+                            local offspringModel = SelectOffspringModel(animal.model)
+                            
+                            -- Set appropriate gender based on offspring model
+                            local offspringGender
+                            if offspringModel == 'a_c_bull_01' then
+                                offspringGender = 'male'  -- Bulls are always male
+                            elseif offspringModel == 'a_c_cow' then
+                                offspringGender = 'female'  -- Cows are always female
+                            else
+                                -- For other models, use random gender
+                                offspringGender = math.random() < 0.5 and 'male' or 'female'
+                            end
+                            
+                            if Config.Debug then
+                                print('^2[BREEDING DEBUG]^7 Creating offspring ' .. offspringId .. ': model=' .. offspringModel .. ', gender=' .. offspringGender)
+                            end
                             
                             -- Validate parent position data
                             if not animal.pos_x or not animal.pos_y or not animal.pos_z or
@@ -805,12 +980,6 @@ function ProcessAnimalSurvival()
                             local spawnVariation = 5.0
                             local randomX = animal.pos_x + math.random(-spawnVariation, spawnVariation)
                             local randomY = animal.pos_y + math.random(-spawnVariation, spawnVariation)
-                            
-                            -- Determine offspring model (for bull breeding, offspring should be cows)
-                            local offspringModel = animal.model
-                            if animal.model == 'a_c_bull_01' then
-                                offspringModel = 'a_c_cow'  -- Bulls can't give birth, but if somehow they did, offspring would be cows
-                            end
                             
                             -- Insert offspring into database with error handling (non-blocking)
                             MySQL.insert('INSERT INTO rex_ranch_animals (ranchid, animalid, model, pos_x, pos_y, pos_z, pos_w, health, hunger, thirst, scale, age, born, gender, pregnant, breeding_ready_time, mother_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
@@ -846,8 +1015,14 @@ function ProcessAnimalSurvival()
                                     end
                                 else
                                     if Config.Debug then
-                                        print('^2[BREEDING SUCCESS]^7 Successfully inserted offspring ' .. offspringId .. ' for mother ' .. animal.animalid)
+                                        print('^2[BREEDING SUCCESS]^7 Successfully inserted offspring ' .. offspringId .. ' (' .. offspringModel .. ', ' .. offspringGender .. ') for mother ' .. animal.animalid)
                                     end
+                                    
+                                    -- Track offspring type for notification
+                                    if not offspringTypes[offspringModel] then
+                                        offspringTypes[offspringModel] = 0
+                                    end
+                                    offspringTypes[offspringModel] = offspringTypes[offspringModel] + 1
                                 end
                             end)
                             
@@ -880,7 +1055,14 @@ function ProcessAnimalSurvival()
                         end
                         
                         if Config.ServerNotify then
-                            print('^2[REX-RANCH BREEDING]^7 ' .. offspringCount .. ' new ' .. animal.model .. '(s) born at ranch ' .. animal.ranchid)
+                            -- Create detailed offspring description
+                            local offspringDescription = {}
+                            for model, count in pairs(offspringTypes) do
+                                local modelName = model == 'a_c_cow' and 'calf' or (model == 'a_c_bull_01' and 'bull calf' or model)
+                                table.insert(offspringDescription, count .. ' ' .. modelName .. (count > 1 and 's' or ''))
+                            end
+                            local description = table.concat(offspringDescription, ', ')
+                            print('^2[REX-RANCH BREEDING]^7 ' .. description .. ' born at ' .. animal.ranchid .. ' (mother: ' .. animal.animalid .. ')')
                         end
                         
                         -- Refresh animals after breeding to show new offspring
@@ -1112,7 +1294,25 @@ function ProcessAnimalSurvival()
         
         -- Clean up expired breeding cooldowns (separate simple query)
         local currentTime = os.time()
-        MySQL.execute('UPDATE rex_ranch_animals SET breeding_ready_time = 0 WHERE breeding_ready_time > 0 AND breeding_ready_time <= ?', {currentTime})
+        MySQL.query('SELECT animalid FROM rex_ranch_animals WHERE breeding_ready_time > 0 AND breeding_ready_time <= ?', {currentTime}, function(expiredAnimals)
+            if expiredAnimals and #expiredAnimals > 0 then
+                -- Clear the cooldowns in database
+                MySQL.execute('UPDATE rex_ranch_animals SET breeding_ready_time = 0 WHERE breeding_ready_time > 0 AND breeding_ready_time <= ?', {currentTime})
+                
+                -- Update client cache for each expired animal
+                if Config.UpdateClientsOnCron then
+                    for _, animal in ipairs(expiredAnimals) do
+                        TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', -1, animal.animalid, {
+                            breeding_ready_time = 0
+                        })
+                        
+                        if Config.Debug then
+                            print('^2[DEBUG]^7 Cleared breeding cooldown for animal ' .. animal.animalid)
+                        end
+                    end
+                end
+            end
+        end)
         
         -- Remove dead animals from database and client
         if #animalsToRemove > 0 then
@@ -1389,16 +1589,23 @@ local function CheckAutomaticBreeding()
                                     local currentTime = os.time()
                                     local breedingConfig = Config.BreedingConfig['a_c_cow'] -- Use cow config for offspring
                                     local gestationEndTime = currentTime + breedingConfig.gestationPeriod
-                                    local nextBreedingTime = currentTime + Config.BreedingCooldown
+                                    
+                                    -- Use gender-specific cooldowns
+                                    local bullCooldown = GetBreedingCooldown('male')
+                                    local cowCooldown = GetBreedingCooldown('female')
+                                    local bullNextBreedingTime = currentTime + bullCooldown
+                                    local cowNextBreedingTime = currentTime + cowCooldown
                                     
                                     -- Set cow as pregnant
                                     local pregnancySuccess = MySQL.update.await('UPDATE rex_ranch_animals SET pregnant = 1, gestation_end_time = ? WHERE animalid = ?', 
                                         {gestationEndTime, cow.animalid})
                                     
                                     if pregnancySuccess and pregnancySuccess > 0 then
-                                        -- Set breeding cooldown for both animals
-                                        MySQL.update('UPDATE rex_ranch_animals SET breeding_ready_time = ?, breeding_attempts = breeding_attempts + 1 WHERE animalid IN (?, ?)', 
-                                            {nextBreedingTime, bull.animalid, cow.animalid})
+                                        -- Set gender-specific breeding cooldowns
+                                        MySQL.update('UPDATE rex_ranch_animals SET breeding_ready_time = ?, breeding_attempts = breeding_attempts + 1 WHERE animalid = ?', 
+                                            {bullNextBreedingTime, bull.animalid})
+                                        MySQL.update('UPDATE rex_ranch_animals SET breeding_ready_time = ?, breeding_attempts = breeding_attempts + 1 WHERE animalid = ?', 
+                                            {cowNextBreedingTime, cow.animalid})
                                         
                                         if Config.AutomaticBreedingNotifications and Config.ServerNotify then
                                             local gestationDays = math.floor(breedingConfig.gestationPeriod / (24 * 60 * 60))
@@ -1424,8 +1631,8 @@ local function CheckAutomaticBreeding()
                                             print('^2[AUTO BREEDING]^7 Successfully bred bull ' .. bull.animalid .. ' with cow ' .. cow.animalid .. ' at distance ' .. math.floor(distance * 10) / 10 .. 'm')
                                         end
                                         
-                                        -- Only breed one pair per bull per check to avoid overwhelming
-                                        break
+                                        -- Bulls can breed with multiple cows, so don't break here
+                                        -- Only limit is the bull's cooldown time
                                     end
                                 end
                             end
@@ -1453,16 +1660,23 @@ local function CheckAutomaticBreeding()
                                 local currentTime = os.time()
                                 local breedingConfig = Config.BreedingConfig[male.model]
                                 local gestationEndTime = currentTime + breedingConfig.gestationPeriod
-                                local nextBreedingTime = currentTime + Config.BreedingCooldown
+                                
+                                -- Use gender-specific cooldowns
+                                local maleCooldown = GetBreedingCooldown('male')
+                                local femaleCooldown = GetBreedingCooldown('female')
+                                local maleNextBreedingTime = currentTime + maleCooldown
+                                local femaleNextBreedingTime = currentTime + femaleCooldown
                                 
                                 -- Set female as pregnant
                                 local pregnancySuccess = MySQL.update.await('UPDATE rex_ranch_animals SET pregnant = 1, gestation_end_time = ? WHERE animalid = ?', 
                                     {gestationEndTime, female.animalid})
                                 
                                 if pregnancySuccess and pregnancySuccess > 0 then
-                                    -- Set breeding cooldown for both animals
-                                    MySQL.update('UPDATE rex_ranch_animals SET breeding_ready_time = ?, breeding_attempts = breeding_attempts + 1 WHERE animalid IN (?, ?)', 
-                                        {nextBreedingTime, male.animalid, female.animalid})
+                                    -- Set gender-specific breeding cooldowns
+                                    MySQL.update('UPDATE rex_ranch_animals SET breeding_ready_time = ?, breeding_attempts = breeding_attempts + 1 WHERE animalid = ?', 
+                                        {maleNextBreedingTime, male.animalid})
+                                    MySQL.update('UPDATE rex_ranch_animals SET breeding_ready_time = ?, breeding_attempts = breeding_attempts + 1 WHERE animalid = ?', 
+                                        {femaleNextBreedingTime, female.animalid})
                                     
                                     if Config.AutomaticBreedingNotifications and Config.ServerNotify then
                                         local gestationDays = math.floor(breedingConfig.gestationPeriod / (24 * 60 * 60))
@@ -2164,16 +2378,29 @@ RegisterNetEvent('rex-ranch:server:startBreeding', function(animal1id, animal2id
         local breedingConfig = Config.BreedingConfig[breedingModel]
         local currentTime = os.time()
         local gestationEndTime = currentTime + breedingConfig.gestationPeriod
-        local nextBreedingTime = currentTime + Config.BreedingCooldown
+        
+        -- Use gender-specific cooldowns
+        local maleCooldown = GetBreedingCooldown('male')
+        local femaleCooldown = GetBreedingCooldown('female')
+        local maleNextBreedingTime = currentTime + maleCooldown
+        local femaleNextBreedingTime = currentTime + femaleCooldown
+        
+        if Config.Debug then
+            print('^3[BREEDING DEBUG]^7 Gender-specific cooldowns applied:')
+            print('^3[BREEDING DEBUG]^7 - Male (' .. male.animalid .. '): ' .. maleCooldown .. ' seconds (' .. math.floor(maleCooldown / 3600) .. 'h)')
+            print('^3[BREEDING DEBUG]^7 - Female (' .. female.animalid .. '): ' .. femaleCooldown .. ' seconds (' .. math.floor(femaleCooldown / 3600) .. 'h)')
+        end
         
         -- Set female as pregnant first
         local pregnancySuccess = MySQL.update.await('UPDATE rex_ranch_animals SET pregnant = 1, gestation_end_time = ? WHERE animalid = ?', 
             {gestationEndTime, female.animalid})
         
         if pregnancySuccess and pregnancySuccess > 0 then
-            -- Only set breeding cooldown if pregnancy was successful
-            MySQL.update('UPDATE rex_ranch_animals SET breeding_ready_time = ?, breeding_attempts = breeding_attempts + 1 WHERE animalid IN (?, ?)', 
-                {nextBreedingTime, male.animalid, female.animalid})
+            -- Set gender-specific breeding cooldowns
+            MySQL.update('UPDATE rex_ranch_animals SET breeding_ready_time = ?, breeding_attempts = breeding_attempts + 1 WHERE animalid = ?', 
+                {maleNextBreedingTime, male.animalid})
+            MySQL.update('UPDATE rex_ranch_animals SET breeding_ready_time = ?, breeding_attempts = breeding_attempts + 1 WHERE animalid = ?', 
+                {femaleNextBreedingTime, female.animalid})
         
             -- Send success notification
             local animalName = 'animals'
@@ -2208,10 +2435,10 @@ RegisterNetEvent('rex-ranch:server:startBreeding', function(animal1id, animal2id
         TriggerClientEvent('rex-ranch:client:updateAnimalStatus', src, female.animalid, {
             pregnant = 1,
             gestation_end_time = gestationEndTime,
-            breeding_ready_time = nextBreedingTime
+            breeding_ready_time = femaleNextBreedingTime
         })
         TriggerClientEvent('rex-ranch:client:updateAnimalStatus', src, male.animalid, {
-            breeding_ready_time = nextBreedingTime
+            breeding_ready_time = maleNextBreedingTime
         })
         
             if Config.Debug then

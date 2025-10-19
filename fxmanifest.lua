@@ -3,7 +3,7 @@ rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aw
 game 'rdr3'
 
 description 'rex-ranch'
-version '0.0.6'
+version '0.0.7'
 
 shared_scripts {
     '@ox_lib/init.lua',
@@ -29,6 +29,13 @@ dependencies {
 
 files {
   'locales/*.json'
+}
+
+escrow_ignore {
+    'installation/*',
+    'locales/*',
+    'shared/*',
+    'README.md'
 }
 
 lua54 'yes'
