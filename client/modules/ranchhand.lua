@@ -21,13 +21,6 @@ RegisterNetEvent('rex-ranch:client:openranchhandmenu', function(ranchid)
             args = { ranchid = ranchid },
             arrow = true
         },
-        {
-            title = 'Sell Animals',
-            icon = 'fa-solid fa-hand-holding-dollar',
-            event = 'rex-ranch:client:showSalePoints',
-            args = { ranchid = ranchid },
-            arrow = true
-        }
     }
     
     if Config.HerdingEnabled then
