@@ -671,7 +671,7 @@ CreateThread(function()
         local timeSinceLastRun = currentTime - lastCronRun
         
         -- Determine expected interval based on cron configuration
-        local expectedInterval = 15 -- Default for testing (15 seconds)
+        local expectedInterval = 15
         if Config.AnimalCronJob == '*/15 * * * *' then
             expectedInterval = 900 -- 15 minutes for production
         elseif Config.AnimalCronJob == '0 * * * *' then
@@ -750,12 +750,32 @@ function ProcessAnimalSurvival()
             local scale = scaleTable[math.min(animalAge, 5)] or 1.00
             
             -- Check for breeding/pregnancy events if enabled
-            if Config.BreedingEnabled and animal.pregnant == 1 and animal.gestation_end_time then
+            -- Handle both boolean and integer pregnancy values from database
+            local isPregnant = (animal.pregnant == 1 or animal.pregnant == true or animal.pregnant == 'true')
+            if Config.BreedingEnabled and isPregnant and animal.gestation_end_time then
                 local currentTime = os.time()
+                
+                if Config.Debug then
+                    print('^3[PREGNANCY DEBUG]^7 Found pregnant animal ' .. animal.animalid .. ':')
+                    print('^3[PREGNANCY DEBUG]^7 - Current time: ' .. currentTime .. ' (' .. os.date('%Y-%m-%d %H:%M:%S', currentTime) .. ')')
+                    print('^3[PREGNANCY DEBUG]^7 - Gestation end: ' .. animal.gestation_end_time .. ' (' .. os.date('%Y-%m-%d %H:%M:%S', animal.gestation_end_time) .. ')')
+                    print('^3[PREGNANCY DEBUG]^7 - Time remaining: ' .. (animal.gestation_end_time - currentTime) .. ' seconds')
+                    print('^3[PREGNANCY DEBUG]^7 - Ready to give birth: ' .. tostring(currentTime >= animal.gestation_end_time))
+                end
                 
                 -- Check if gestation period is complete
                 if currentTime >= animal.gestation_end_time then
                     local breedingConfig = Config.BreedingConfig[animal.model]
+                    
+                    if Config.Debug then
+                        print('^3[PREGNANCY DEBUG]^7 Animal ' .. animal.animalid .. ' is ready to give birth!')
+                        print('^3[PREGNANCY DEBUG]^7 - Model: ' .. tostring(animal.model))
+                        print('^3[PREGNANCY DEBUG]^7 - Breeding config exists: ' .. tostring(breedingConfig ~= nil))
+                        if breedingConfig then
+                            print('^3[PREGNANCY DEBUG]^7 - Offspring count: ' .. breedingConfig.offspringCount.min .. '-' .. breedingConfig.offspringCount.max)
+                        end
+                    end
+                    
                     if breedingConfig then
                         local success, breedingError = pcall(function()
                         -- Determine number of offspring
@@ -874,6 +894,36 @@ function ProcessAnimalSurvival()
                                 print('^1[BREEDING ERROR]^7 Error during offspring creation for animal ' .. animal.animalid .. ': ' .. tostring(breedingError))
                             end
                         end
+                    else
+                        if Config.Debug then
+                            print('^1[BREEDING ERROR]^7 No breeding config found for model: ' .. tostring(animal.model))
+                            print('^1[BREEDING ERROR]^7 Available breeding configs:')
+                            for model, config in pairs(Config.BreedingConfig) do
+                                print('^1[BREEDING ERROR]^7 - ' .. model)
+                            end
+                        end
+                    end
+                else
+                    if Config.Debug and isPregnant then
+                        print('^3[PREGNANCY DEBUG]^7 Animal ' .. animal.animalid .. ' is pregnant but not ready to give birth yet (time remaining: ' .. (animal.gestation_end_time - currentTime) .. ' seconds)')
+                    end
+                end
+            else
+                -- Debug when breeding conditions are not met
+                local debugIsPregnant = (animal.pregnant == 1 or animal.pregnant == true or animal.pregnant == 'true')
+                if Config.Debug and debugIsPregnant then
+                    local reasons = {}
+                    if not Config.BreedingEnabled then
+                        table.insert(reasons, 'Breeding disabled')
+                    end
+                    if not debugIsPregnant then
+                        table.insert(reasons, 'Not pregnant')
+                    end
+                    if not animal.gestation_end_time then
+                        table.insert(reasons, 'No gestation end time')
+                    end
+                    if #reasons > 0 then
+                        print('^3[PREGNANCY DEBUG]^7 Animal ' .. animal.animalid .. ' breeding skipped: ' .. table.concat(reasons, ', '))
                     end
                 end
             end
