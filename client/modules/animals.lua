@@ -8,6 +8,27 @@ local spawningLocks = {} -- Track animals currently being spawned to prevent dup
 lib.locale()
 
 ---------------------------------------------
+-- helper function to check if player is ranch staff
+---------------------------------------------
+local function isPlayerRanchStaff()
+    local PlayerData = RSGCore.Functions.GetPlayerData()
+    if not PlayerData or not PlayerData.job then
+        return false
+    end
+    
+    local playerjob = PlayerData.job.name
+    
+    -- Check if player's job matches any ranch job access
+    for _, ranchData in pairs(Config.RanchLocations) do
+        if playerjob == ranchData.jobaccess then
+            return true
+        end
+    end
+    
+    return false
+end
+
+---------------------------------------------
 -- helper function to finalize animal menu display
 ---------------------------------------------
 local function finalizeAnimalMenu(menuOptions, freshData, animal)
@@ -45,8 +66,12 @@ end)
 -- force refresh animals from server
 ---------------------------------------------
 RegisterNetEvent('rex-ranch:client:refreshAnimals', function()  
-    -- Clear all currently spawned animals
+    -- Notify server of all animals we're clearing (if we own them)
     for animalKey, animalData in pairs(spawnedAnimals) do
+        if animalData and animalData.isOwner then
+            TriggerServerEvent('rex-ranch:server:animalDespawned', animalKey)
+        end
+        
         if animalData and animalData.spawnedAnimal and DoesEntityExist(animalData.spawnedAnimal) then
             exports.ox_target:removeLocalEntity(animalData.spawnedAnimal, 'ranch_animal')
             DeletePed(animalData.spawnedAnimal)
@@ -86,31 +111,55 @@ CreateThread(function()
                     -- Use consistent string key for animal ID
                     local animalKey = tostring(loadData.animalid or k)
                     
-                    -- spawn animal if within range (with lock to prevent duplicates)
+                    -- Request server-controlled spawn to prevent duplicates
                     if distance < Config.AnimalDistanceSpawn and not spawnedAnimals[animalKey] and not spawningLocks[animalKey] then
                         spawningLocks[animalKey] = true
-                        local spawnedAnimal = NearAnimal(loadData)
                         
-                        if spawnedAnimal and DoesEntityExist(spawnedAnimal) then
-                            spawnedAnimals[animalKey] = { spawnedAnimal = spawnedAnimal }
-                            -- Debug spawning
-                            if Config.Debug then
-                                print('^2[ANIMAL DEBUG]^7 Spawned animal ' .. animalKey .. ' (entity: ' .. spawnedAnimal .. ') at distance ' .. math.floor(distance * 10) / 10 .. 'm')
+                        -- Request spawn permission from server
+                        RSGCore.Functions.TriggerCallback('rex-ranch:server:requestAnimalSpawn', function(canSpawn, spawnData)
+                            if canSpawn and spawnData then
+                                local spawnedAnimal = NearAnimal(spawnData)
+                                
+                                if spawnedAnimal and DoesEntityExist(spawnedAnimal) then
+                                    -- Wait for network registration to complete
+                                    Wait(100)
+                                    
+                                    local networkId = NetworkGetNetworkIdFromEntity(spawnedAnimal)
+                                    spawnedAnimals[animalKey] = { 
+                                        spawnedAnimal = spawnedAnimal, 
+                                        isOwner = true,
+                                        networkId = networkId
+                                    }
+                                    
+                                    -- Register the network ID with server for cross-client sync
+                                    TriggerServerEvent('rex-ranch:server:registerAnimalNetworkId', animalKey, networkId)
+                                    
+                                    -- Debug spawning
+                                    if Config.Debug then
+                                        print('^2[ANIMAL DEBUG]^7 Spawned animal ' .. animalKey .. ' (entity: ' .. spawnedAnimal .. ', networkId: ' .. networkId .. ') at distance ' .. math.floor(distance * 10) / 10 .. 'm - CLIENT OWNER')
+                                    end
+                                else
+                                    -- Failed to spawn, notify server
+                                    TriggerServerEvent('rex-ranch:server:animalSpawnFailed', animalKey)
+                                    if Config.Debug then
+                                        print('^1[ANIMAL DEBUG]^7 Failed to spawn animal ' .. animalKey .. ' at distance ' .. math.floor(distance * 10) / 10 .. 'm')
+                                    end
+                                end
+                            elseif Config.Debug then
+                                print('^3[ANIMAL DEBUG]^7 Server denied spawn for animal ' .. animalKey .. ' (already owned by another client)')
                             end
-                        else
-                            -- Failed to spawn, log error if debug enabled
-                            if Config.Debug then
-                                print('^1[ANIMAL DEBUG]^7 Failed to spawn animal ' .. animalKey .. ' at distance ' .. math.floor(distance * 10) / 10 .. 'm')
-                            end
-                        end
-                        
-                        -- Always clear the lock, regardless of spawn success
-                        spawningLocks[animalKey] = nil
+                            
+                            -- Always clear the lock
+                            spawningLocks[animalKey] = nil
+                        end, animalKey, loadData)
                     end
                     
-                    -- despawn animal if out of range (but not if being transported)
+                    -- despawn animal if out of range (but only if we own it and not being transported)
                     local isTransporting = transportingAnimals[animalKey] or followStates[animalKey]
-                    if distance >= Config.AnimalDistanceSpawn and spawnedAnimals[animalKey] and not (Config.TransportMode and isTransporting) then
+                    if distance >= Config.AnimalDistanceSpawn and spawnedAnimals[animalKey] and spawnedAnimals[animalKey].isOwner and not (Config.TransportMode and isTransporting) then
+                        -- Notify server we're despawning our owned animal
+                        TriggerServerEvent('rex-ranch:server:animalDespawned', animalKey)
+                        
                         if DoesEntityExist(spawnedAnimals[animalKey].spawnedAnimal) then
                             if Config.AnimalFadeIn then
                                 for i = 255, 0, -51 do
@@ -123,7 +172,7 @@ CreateThread(function()
                             DeletePed(spawnedAnimals[animalKey].spawnedAnimal)
                             
                             if Config.Debug then
-                                print('^1[ANIMAL DEBUG]^7 Despawned animal ' .. animalKey .. ' (too far: ' .. math.floor(distance * 10) / 10 .. 'm)')
+                                print('^1[ANIMAL DEBUG]^7 Despawned owned animal ' .. animalKey .. ' (too far: ' .. math.floor(distance * 10) / 10 .. 'm)')
                             end
                         end
                         spawnedAnimals[animalKey] = nil
@@ -163,8 +212,15 @@ function NearAnimal(loadData)
         return nil
     end
     
+    -- Register as networked so all players can see the animal
     NetworkRegisterEntityAsNetworked(spawnedAnimal)
     SetNetworkIdExistsOnAllMachines(NetworkGetNetworkIdFromEntity(spawnedAnimal), true)
+    
+    -- Store network ID for cross-client reference
+    local networkId = NetworkGetNetworkIdFromEntity(spawnedAnimal)
+    if Config.Debug then
+        print('^2[NETWORK DEBUG]^7 Registered networked animal ' .. tostring(loadData.animalid) .. ' with NetworkID: ' .. networkId)
+    end
     
     -- Ensure scale is valid (between 0.1 and 2.0), handle NaN and invalid values
     local scale = tonumber(loadData.scale)
@@ -193,11 +249,78 @@ function NearAnimal(loadData)
             onSelect = function()
                 TriggerEvent('rex-ranch:client:animalmenu', spawnedAnimal, loadData)
             end,
+            canInteract = function()
+                return isPlayerRanchStaff()
+            end,
             distance = 2.0
         }
     })
     return spawnedAnimal
 end
+
+---------------------------------------------
+-- handle networked animal spawned by another client
+---------------------------------------------
+RegisterNetEvent('rex-ranch:client:animalNetworkSpawned', function(animalKey, networkId, ownerId)
+    local src = GetPlayerServerId(PlayerId())
+    
+    -- Don't process our own spawns
+    if ownerId == src then return end
+    
+    -- Check if we can see this networked entity
+    local entity = NetworkGetEntityFromNetworkId(networkId)
+    if entity and DoesEntityExist(entity) then
+        -- Track this as a non-owned networked animal
+        spawnedAnimals[animalKey] = {
+            spawnedAnimal = entity,
+            isOwner = false,
+            networkId = networkId,
+            ownerId = ownerId
+        }
+        
+        -- Add interaction target for the networked animal
+        local animalData = getFreshAnimalData(animalKey)
+        if animalData then
+            exports.ox_target:addLocalEntity(entity, {
+                {
+                    name = 'ranch_animal',
+                    icon = 'far fa-eye',
+                    label = 'Animal Actions',
+                    onSelect = function()
+                        TriggerEvent('rex-ranch:client:animalmenu', entity, animalData)
+                    end,
+                    canInteract = function()
+                        return isPlayerRanchStaff()
+                    end,
+                    distance = 2.0
+                }
+            })
+        end
+        
+        if Config.Debug then
+            print('^3[NETWORK DEBUG]^7 Received networked animal ' .. animalKey .. ' (networkId: ' .. networkId .. ') from player ' .. ownerId)
+        end
+    elseif Config.Debug then
+        print('^1[NETWORK DEBUG]^7 Could not find networked entity for animal ' .. animalKey .. ' (networkId: ' .. networkId .. ')')
+    end
+end)
+
+---------------------------------------------
+-- handle networked animal despawned by another client
+---------------------------------------------
+RegisterNetEvent('rex-ranch:client:animalNetworkDespawned', function(animalKey, networkId)
+    if spawnedAnimals[animalKey] and not spawnedAnimals[animalKey].isOwner then
+        -- Remove target and clear tracking for non-owned networked animal
+        if spawnedAnimals[animalKey].spawnedAnimal and DoesEntityExist(spawnedAnimals[animalKey].spawnedAnimal) then
+            exports.ox_target:removeLocalEntity(spawnedAnimals[animalKey].spawnedAnimal, 'ranch_animal')
+        end
+        spawnedAnimals[animalKey] = nil
+        
+        if Config.Debug then
+            print('^3[NETWORK DEBUG]^7 Removed networked animal ' .. animalKey .. ' (networkId: ' .. networkId .. ') tracking')
+        end
+    end
+end)
 
 ---------------------------------------------
 -- move animal data to cache

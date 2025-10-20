@@ -8,7 +8,7 @@ Config.Debug = false
 ---------------------------------
 -- npc settings
 ---------------------------------
-Config.DistanceSpawn = 20.0
+Config.DistanceSpawn = 50.0
 Config.FadeIn = true
 
 ---------------------------------

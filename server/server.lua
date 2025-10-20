@@ -2,6 +2,26 @@ local RSGCore = exports['rsg-core']:GetCoreObject()
 lib.locale()
 
 ---------------------------------------------
+-- helper function to check if player is ranch staff
+---------------------------------------------
+local function isPlayerRanchStaff(Player)
+    if not Player or not Player.PlayerData.job then
+        return false
+    end
+    
+    local playerjob = Player.PlayerData.job.name
+    
+    -- Check if player's job matches any ranch job access
+    for _, ranchData in pairs(Config.RanchLocations) do
+        if playerjob == ranchData.jobaccess then
+            return true
+        end
+    end
+    
+    return false
+end
+
+---------------------------------------------
 -- ranch storage
 ---------------------------------------------
 RegisterNetEvent('rex-ranch:server:ranchstorage', function(data)
@@ -120,6 +140,132 @@ local function CreateAnimalId()
 end
 
 ---------------------------------------------
+-- track which client owns each spawned animal to prevent duplicates
+---------------------------------------------
+local animalOwnership = {} -- animalid -> src mapping
+local animalNetworkIds = {} -- animalid -> networkId mapping for cross-client sync
+
+---------------------------------------------
+-- server-controlled animal spawning to prevent duplicates
+---------------------------------------------
+RSGCore.Functions.CreateCallback('rex-ranch:server:requestAnimalSpawn', function(src, cb, animalKey, animalData)
+    local Player = RSGCore.Functions.GetPlayer(src)
+    if not Player or not animalKey or not animalData or not isPlayerRanchStaff(Player) then
+        cb(false, nil)
+        return
+    end
+    
+    -- Check if animal is already owned by another client
+    if animalOwnership[animalKey] then
+        -- Verify the owner is still online
+        local ownerPlayer = RSGCore.Functions.GetPlayer(animalOwnership[animalKey])
+        if ownerPlayer then
+            -- Animal is owned by another online player
+            if Config.Debug then
+                print('^3[SPAWN CONTROL]^7 Animal ' .. animalKey .. ' spawn denied - owned by player ' .. animalOwnership[animalKey])
+            end
+            cb(false, nil)
+            return
+        else
+            -- Previous owner disconnected, clear ownership
+            animalOwnership[animalKey] = nil
+            if Config.Debug then
+                print('^3[SPAWN CONTROL]^7 Cleared stale ownership for animal ' .. animalKey)
+            end
+        end
+    end
+    
+    -- Grant ownership to this client
+    animalOwnership[animalKey] = src
+    if Config.Debug then
+        print('^2[SPAWN CONTROL]^7 Granted ownership of animal ' .. animalKey .. ' to player ' .. src)
+    end
+    
+    cb(true, animalData)
+end)
+
+---------------------------------------------
+-- handle animal spawn failures
+---------------------------------------------
+RegisterNetEvent('rex-ranch:server:animalSpawnFailed', function(animalKey)
+    local src = source
+    
+    -- Clear ownership if spawn failed
+    if animalOwnership[animalKey] == src then
+        animalOwnership[animalKey] = nil
+        if Config.Debug then
+            print('^1[SPAWN CONTROL]^7 Cleared ownership for failed spawn: animal ' .. animalKey .. ' from player ' .. src)
+        end
+    end
+end)
+
+---------------------------------------------
+-- register animal network ID after successful spawn
+---------------------------------------------
+RegisterNetEvent('rex-ranch:server:registerAnimalNetworkId', function(animalKey, networkId)
+    local src = source
+    
+    -- Only allow the owner to register the network ID
+    if animalOwnership[animalKey] == src then
+        animalNetworkIds[animalKey] = networkId
+        
+        -- Notify all other clients about this networked animal
+        TriggerClientEvent('rex-ranch:client:animalNetworkSpawned', -1, animalKey, networkId, src)
+        
+        if Config.Debug then
+            print('^2[NETWORK SYNC]^7 Registered network ID ' .. networkId .. ' for animal ' .. animalKey .. ' from owner ' .. src)
+        end
+    end
+end)
+
+---------------------------------------------
+-- handle animal despawn notification
+---------------------------------------------
+RegisterNetEvent('rex-ranch:server:animalDespawned', function(animalKey)
+    local src = source
+    
+    -- Clear ownership when animal is despawned
+    if animalOwnership[animalKey] == src then
+        -- Notify all clients that this animal is being despawned
+        if animalNetworkIds[animalKey] then
+            TriggerClientEvent('rex-ranch:client:animalNetworkDespawned', -1, animalKey, animalNetworkIds[animalKey])
+            animalNetworkIds[animalKey] = nil
+        end
+        
+        animalOwnership[animalKey] = nil
+        if Config.Debug then
+            print('^3[SPAWN CONTROL]^7 Cleared ownership for despawned animal ' .. animalKey .. ' from player ' .. src)
+        end
+    end
+end)
+
+---------------------------------------------
+-- clean up ownership when player disconnects
+---------------------------------------------
+AddEventHandler('playerDropped', function(reason)
+    local src = source
+    local clearedCount = 0
+    
+    -- Clear all animal ownership for this player and notify other clients
+    for animalKey, ownerId in pairs(animalOwnership) do
+        if ownerId == src then
+            -- Notify all clients that this animal is no longer spawned
+            if animalNetworkIds[animalKey] then
+                TriggerClientEvent('rex-ranch:client:animalNetworkDespawned', -1, animalKey, animalNetworkIds[animalKey])
+                animalNetworkIds[animalKey] = nil
+            end
+            
+            animalOwnership[animalKey] = nil
+            clearedCount = clearedCount + 1
+        end
+    end
+    
+    if Config.Debug and clearedCount > 0 then
+        print('^3[SPAWN CONTROL]^7 Cleared ' .. clearedCount .. ' animal ownerships and network IDs for disconnected player ' .. src)
+    end
+end)
+
+---------------------------------------------
 -- count amount of animals the ranch owns
 ---------------------------------------------
 RSGCore.Functions.CreateCallback('rex-ranch:server:countanimals', function(src, cb, ranchid)
@@ -231,6 +377,12 @@ RegisterNetEvent('rex-ranch:server:feedAnimal', function(data)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
+    -- Validate player is ranch staff
+    if not Player or not isPlayerRanchStaff(Player) then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You must be ranch staff to feed animals!'})
+        return
+    end
+    
     -- Handle both string and object parameters for backwards compatibility
     local animalid
     if type(data) == 'table' and data.animalid then
@@ -241,7 +393,7 @@ RegisterNetEvent('rex-ranch:server:feedAnimal', function(data)
         animalid = nil
     end
     
-    if not Player or not animalid then return end
+    if not animalid then return end
     
     -- Check if player has animal feed in inventory
     local hasFood = Player.Functions.GetItemByName(Config.FeedItem)
@@ -299,6 +451,12 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
+    -- Validate player is ranch staff
+    if not Player or not isPlayerRanchStaff(Player) then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You must be ranch staff to water animals!'})
+        return
+    end
+    
     -- Handle both string and object parameters for backwards compatibility
     local animalid
     if type(data) == 'table' and data.animalid then
@@ -309,7 +467,7 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
         animalid = nil
     end
     
-    if not Player or not animalid then return end
+    if not animalid then return end
     
     -- Check if player has water bucket in inventory
     local hasWater = Player.Functions.GetItemByName(Config.WaterItem)
@@ -367,6 +525,12 @@ RegisterNetEvent('rex-ranch:server:collectProduct', function(data)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
+    -- Validate player is ranch staff
+    if not Player or not isPlayerRanchStaff(Player) then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You must be ranch staff to collect from animals!'})
+        return
+    end
+    
     -- Handle both string and object parameters for backwards compatibility
     local animalid
     if type(data) == 'table' and data.animalid then
@@ -377,9 +541,9 @@ RegisterNetEvent('rex-ranch:server:collectProduct', function(data)
         animalid = nil
     end
     
-    if not Player or not animalid then
+    if not animalid then
         if Config.Debug then
-            print('^1[COLLECT ERROR]^7 Missing player or animalid - Player: ' .. tostring(Player) .. ', AnimalID: ' .. tostring(animalid))
+            print('^1[COLLECT ERROR]^7 Missing animalid - AnimalID: ' .. tostring(animalid))
         end
         return
     end
@@ -473,7 +637,7 @@ end)
 ---------------------------------------------
 RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalBreedingStatus', function(src, cb, animalid)
     local Player = RSGCore.Functions.GetPlayer(src)
-    if not Player or not animalid then 
+    if not Player or not animalid or not isPlayerRanchStaff(Player) then 
         cb(false)
         return 
     end
@@ -556,7 +720,7 @@ end)
 ---------------------------------------------
 RSGCore.Functions.CreateCallback('rex-ranch:server:getPregnancyProgress', function(src, cb, animalid)
     local Player = RSGCore.Functions.GetPlayer(src)
-    if not Player or not animalid then 
+    if not Player or not animalid or not isPlayerRanchStaff(Player) then 
         cb({isPregnant = false})
         return 
     end
