@@ -1255,6 +1255,398 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getAvailableAnimalsForBreedin
     end)
 end)
 
+---------------------------------------------
+-- get nearby animals for sale
+---------------------------------------------
+RSGCore.Functions.CreateCallback('rex-ranch:server:getNearbyAnimalsForSale', function(src, cb, ranchid, salePointCoords)
+    local Player = RSGCore.Functions.GetPlayer(src)
+    if not Player or not ranchid then 
+        cb({})
+        return 
+    end
+    
+    -- Get all animals from this ranch that are old enough to sell
+    local success, result = pcall(function()
+        return MySQL.query.await(
+            'SELECT animalid, model, gender, age, health, hunger, thirst, pos_x, pos_y, pos_z FROM rex_ranch_animals WHERE ranchid = ? AND age >= ?',
+            { ranchid, Config.MinAgeToSell }
+        )
+    end)
+    
+    if not success or not result then
+        cb({})
+        return
+    end
+    
+    local animals = {}
+    local salePointVec = vector3(salePointCoords.x, salePointCoords.y, salePointCoords.z)
+    
+    for _, animal in ipairs(result) do
+        -- Calculate sale price based on age
+        local baseSellPrice = Config.BaseSellPrices[animal.model] or 100
+        local ageMultiplier = 1.0
+        local ageCategory = 'Adult'
+        
+        -- Determine age category and apply multiplier
+        if animal.age < Config.PrimeAgeStart then
+            ageMultiplier = Config.AgePricing.young
+            ageCategory = 'Young'
+        elseif animal.age >= Config.PrimeAgeStart and animal.age <= Config.PrimeAgeEnd then
+            ageMultiplier = Config.AgePricing.prime
+            ageCategory = 'Prime'
+        elseif animal.age > Config.PrimeAgeEnd and animal.age < Config.OldAgeStart then
+            ageMultiplier = Config.AgePricing.adult
+            ageCategory = 'Adult'
+        elseif animal.age >= Config.OldAgeStart then
+            ageMultiplier = Config.AgePricing.old
+            ageCategory = 'Old'
+        end
+        
+        local salePrice = math.floor(baseSellPrice * ageMultiplier)
+        
+        -- Check if animal is nearby
+        local animalVec = vector3(animal.pos_x, animal.pos_y, animal.pos_z)
+        local distance = #(salePointVec - animalVec)
+        local isNearby = distance <= Config.AnimalSaleDistance
+        
+        table.insert(animals, {
+            animalid = animal.animalid,
+            model = animal.model,
+            gender = animal.gender,
+            age = animal.age,
+            ageCategory = ageCategory,
+            health = animal.health,
+            hunger = animal.hunger,
+            thirst = animal.thirst,
+            salePrice = salePrice,
+            distance = math.floor(distance),
+            isNearby = isNearby
+        })
+    end
+    
+    cb(animals)
+end)
+
+---------------------------------------------
+-- sell single animal
+---------------------------------------------
+RegisterNetEvent('rex-ranch:server:sellAnimal', function(animalid, salePrice, salePointCoords)
+    local src = source
+    local Player = RSGCore.Functions.GetPlayer(src)
+    
+    if not Player then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Player not found!'})
+        return
+    end
+    
+    -- Verify player is ranch staff
+    if not isPlayerRanchStaff(Player) then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You must be ranch staff to sell animals!'})
+        return
+    end
+    
+    if not animalid or not salePrice then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Invalid animal or price!'})
+        return
+    end
+    
+    -- Get animal data from database
+    local animalResult = MySQL.query.await('SELECT animalid, ranchid, age, model FROM rex_ranch_animals WHERE animalid = ?', {animalid})
+    
+    if not animalResult or #animalResult == 0 then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Animal not found!'})
+        if Config.Debug then
+            print('^1[SELL ANIMAL ERROR]^7 Animal ' .. animalid .. ' not found in database')
+        end
+        return
+    end
+    
+    local animal = animalResult[1]
+    
+    -- Verify animal is old enough to sell
+    if animal.age < Config.MinAgeToSell then
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'error',
+            description = 'This animal is too young to sell! Must be at least ' .. Config.MinAgeToSell .. ' days old.'
+        })
+        return
+    end
+    
+    -- Verify proximity if required
+    if Config.RequireAnimalPresent then
+        -- Would need to check animal position vs sale point - for now assume it passed the client check
+    end
+    
+    -- Delete animal from database
+    local deleteSuccess, deleteError = pcall(function()
+        return MySQL.update.await('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animalid})
+    end)
+    
+    if not deleteSuccess or not deleteError or deleteError == 0 then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to complete sale!'})
+        if Config.Debug then
+            print('^1[SELL ANIMAL ERROR]^7 Failed to delete animal ' .. animalid .. ' from database')
+        end
+        return
+    end
+    
+    -- Give money to player
+    Player.Functions.AddMoney('cash', salePrice)
+    
+    -- Notify player
+    TriggerClientEvent('ox_lib:notify', src, {
+        type = 'success',
+        description = 'Sold ' .. (animal.model == 'a_c_bull_01' and 'Bull' or 'Cow') .. ' for $' .. salePrice .. '!'
+    })
+    
+    if Config.ServerNotify then
+        TriggerClientEvent('ox_lib:notify', -1, {
+            type = 'info',
+            description = 'An animal has been sold at the livestock market!'
+        })
+    end
+    
+    -- Remove from clients and refresh
+    TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animalid)
+    TriggerEvent('rex-ranch:server:refreshAnimals')
+    
+    if Config.Debug then
+        print('^2[SELL ANIMAL SUCCESS]^7 Player ' .. src .. ' sold animal ' .. animalid .. ' for $' .. salePrice)
+    end
+end)
+
+---------------------------------------------
+-- sell all animals
+---------------------------------------------
+RegisterNetEvent('rex-ranch:server:sellAllAnimals', function(animals, salePointCoords)
+    local src = source
+    local Player = RSGCore.Functions.GetPlayer(src)
+    
+    if not Player then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Player not found!'})
+        return
+    end
+    
+    -- Verify player is ranch staff
+    if not isPlayerRanchStaff(Player) then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You must be ranch staff to sell animals!'})
+        return
+    end
+    
+    if not animals or #animals == 0 then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'No animals to sell!'})
+        return
+    end
+    
+    local totalValue = 0
+    local successCount = 0
+    local failedAnimals = {}
+    
+    -- Process each animal
+    for _, animal in ipairs(animals) do
+        if animal.animalid and animal.salePrice then
+            -- Get animal data from database to verify
+            local animalResult = MySQL.query.await('SELECT animalid, age FROM rex_ranch_animals WHERE animalid = ?', {animal.animalid})
+            
+            if animalResult and #animalResult > 0 then
+                local dbAnimal = animalResult[1]
+                
+                -- Verify age requirement
+                if dbAnimal.age >= Config.MinAgeToSell then
+                    -- Delete animal
+                    local deleteSuccess, deleteError = pcall(function()
+                        return MySQL.update.await('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animal.animalid})
+                    end)
+                    
+                    if deleteSuccess and deleteError and deleteError > 0 then
+                        totalValue = totalValue + animal.salePrice
+                        successCount = successCount + 1
+                        TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animal.animalid)
+                    else
+                        table.insert(failedAnimals, animal.animalid)
+                    end
+                else
+                    table.insert(failedAnimals, animal.animalid)
+                end
+            else
+                table.insert(failedAnimals, animal.animalid)
+            end
+        end
+    end
+    
+    -- Give total money to player
+    if totalValue > 0 then
+        Player.Functions.AddMoney('cash', totalValue)
+    end
+    
+    -- Notify player
+    if successCount == #animals then
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'success',
+            description = 'Sold all ' .. successCount .. ' animals for a total of $' .. totalValue .. '!'
+        })
+    elseif successCount > 0 then
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'warning',
+            description = 'Sold ' .. successCount .. ' out of ' .. #animals .. ' animals for $' .. totalValue .. '!'
+        })
+    else
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'error',
+            description = 'Failed to sell any animals!'
+        })
+    end
+    
+    if Config.ServerNotify and successCount > 0 then
+        TriggerClientEvent('ox_lib:notify', -1, {
+            type = 'info',
+            description = successCount .. ' animal(s) have been sold at the livestock market!'
+        })
+    end
+    
+    -- Refresh all clients
+    TriggerEvent('rex-ranch:server:refreshAnimals')
+    
+    if Config.Debug then
+        print('^2[SELL ANIMALS SUCCESS]^7 Player ' .. src .. ' sold ' .. successCount .. ' animals for $' .. totalValue)
+        if #failedAnimals > 0 then
+            print('^3[SELL ANIMALS WARNING]^7 Failed to sell ' .. #failedAnimals .. ' animals')
+        end
+    end
+end)
+
+---------------------------------------------
+-- buy animal system
+---------------------------------------------
+RegisterNetEvent('rex-ranch:server:buyAnimal', function(purchaseData)
+    local src = source
+    local Player = RSGCore.Functions.GetPlayer(src)
+    
+    if not Player then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Player not found!'})
+        return
+    end
+    
+    -- Verify player is ranch staff
+    if not isPlayerRanchStaff(Player) then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You must be ranch staff to buy animals!'})
+        return
+    end
+    
+    -- Validate purchase data
+    if not purchaseData or not purchaseData.animalType or not purchaseData.price or not purchaseData.ranchid then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Invalid purchase data!'})
+        if Config.Debug then
+            print('^1[BUY ANIMAL ERROR]^7 Invalid purchase data from player ' .. src)
+        end
+        return
+    end
+    
+    local playerMoney = Player.PlayerData.money.cash
+    
+    -- Check if player has enough money
+    if playerMoney < purchaseData.price then
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'error',
+            description = 'You need $' .. purchaseData.price .. ' but only have $' .. playerMoney
+        })
+        return
+    end
+    
+    -- Check animal count for the ranch
+    local countResult = MySQL.query.await('SELECT COUNT(*) as count FROM rex_ranch_animals WHERE ranchid = ?', {purchaseData.ranchid})
+    if not countResult or not countResult[1] then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Error checking ranch capacity!'})
+        if Config.Debug then
+            print('^1[BUY ANIMAL ERROR]^7 Failed to count animals for ranch ' .. purchaseData.ranchid)
+        end
+        return
+    end
+    
+    local currentCount = countResult[1].count or 0
+    if currentCount >= Config.MaxRanchAnimals then
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'error',
+            description = 'Your ranch is at maximum capacity (' .. Config.MaxRanchAnimals .. ' animals)'
+        })
+        return
+    end
+    
+    -- Create unique animal ID
+    local animalid = CreateAnimalId()
+    if not animalid then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to create animal ID!'})
+        if Config.Debug then
+            print('^1[BUY ANIMAL ERROR]^7 Failed to create unique animal ID for player ' .. src)
+        end
+        return
+    end
+    
+    -- Determine gender based on config
+    local gender = 'female'
+    if Config.GenderRatios and Config.GenderRatios[purchaseData.animalType] then
+        local maleChance = Config.GenderRatios[purchaseData.animalType]
+        gender = (math.random() < maleChance) and 'male' or 'female'
+    end
+    
+    -- Get spawn point for the animal
+    local spawnPos = purchaseData.spawnpoint or vector4(0, 0, 0, 0)
+    
+    -- Current time for database
+    local currentTime = os.time()
+    
+    -- Insert animal into database
+    local success, error = pcall(function()
+        return MySQL.insert.await('INSERT INTO rex_ranch_animals (animalid, ranchid, model, gender, age, health, hunger, thirst, pos_x, pos_y, pos_z, pos_w, pregnant, born) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
+            animalid,
+            purchaseData.ranchid,
+            purchaseData.animalType,
+            gender,
+            0,  -- age starts at 0
+            100,  -- health
+            100,  -- hunger
+            100,  -- thirst
+            spawnPos.x,
+            spawnPos.y,
+            spawnPos.z,
+            spawnPos.w or 0,
+            0,  -- not pregnant
+            currentTime  -- born timestamp
+        })
+    end)
+    
+    if not success or not error or error == 0 then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to purchase animal!'})
+        if Config.Debug then
+            print('^1[BUY ANIMAL ERROR]^7 Database insert failed: ' .. tostring(error))
+        end
+        return
+    end
+    
+    -- Deduct money from player
+    Player.Functions.RemoveMoney('cash', purchaseData.price)
+    
+    -- Notify player of successful purchase
+    TriggerClientEvent('ox_lib:notify', src, {
+        type = 'success',
+        description = 'Successfully purchased ' .. purchaseData.animalName .. ' for $' .. purchaseData.price .. '!'
+    })
+    
+    if Config.ServerNotify then
+        TriggerClientEvent('ox_lib:notify', -1, {
+            type = 'info',
+            description = 'A new animal has been purchased at ' .. (purchaseData.buyPointName or 'the livestock dealer') .. '!'
+        })
+    end
+    
+    -- Refresh animals for all clients
+    TriggerEvent('rex-ranch:server:refreshAnimals')
+    
+    if Config.Debug then
+        print('^2[BUY ANIMAL SUCCESS]^7 Player ' .. src .. ' purchased ' .. purchaseData.animalName .. ' (ID: ' .. animalid .. ') for $' .. purchaseData.price)
+    end
+end)
+
 -- Start breeding process
 RegisterNetEvent('rex-ranch:server:startBreeding', function(animal1id, animal2id)
     local src = source

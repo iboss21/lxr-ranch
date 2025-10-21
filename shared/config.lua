@@ -6,6 +6,15 @@ Config = {}
 Config.Debug = false
 
 ---------------------------------
+-- animal id settings
+---------------------------------
+Config.ANIMAL_ID_MIN = 100000
+Config.ANIMAL_ID_MAX = 999999
+Config.FALLBACK_ID_SUFFIX_MIN = 1000
+Config.FALLBACK_ID_SUFFIX_MAX = 9999
+Config.MAX_ID_LENGTH = 20
+
+---------------------------------
 -- npc settings
 ---------------------------------
 Config.DistanceSpawn = 50.0
