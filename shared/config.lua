@@ -114,6 +114,7 @@ Config.MaxBreedingAge = 30 -- days old after which animals can't breed (extended
 Config.BreedingDistance = 10.0 -- maximum distance between animals to breed
 Config.BreedingCooldown = 86400 -- 1 days in seconds before animal can breed again (default for cows)
 Config.RequireHealthForBreeding = 70 -- minimum health required for breeding
+Config.RestrictMaleBreedingWhenFemalesPregnant = true -- prevent males from breeding when females are already pregnant
 
 ---------------------------------
 -- Gender-specific breeding cooldowns

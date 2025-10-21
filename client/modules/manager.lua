@@ -16,6 +16,14 @@ RegisterNetEvent('rex-ranch:client:openmanagermenu', function(ranchid)
             args = { ranchid = ranchid },
             arrow = true
         },
+        {
+            title = 'Animal Overview',
+            description = 'View detailed animal statistics and status',
+            icon = 'fa-solid fa-list',
+            event = 'rex-ranch:client:openAnimalOverview',
+            args = ranchid,
+            arrow = true
+        },
     }
     
     -- Add herding option if enabled

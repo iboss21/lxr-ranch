@@ -1,16 +1,417 @@
 local RSGCore = exports['rsg-core']:GetCoreObject()
-local spawnedAnimals = {}
-local animalDataCache = {}
-local followStates = {}
-local transportingAnimals = {} -- Track animals being transported to prevent despawning
-local isBusy = false -- Global busy state for animal interactions
-local spawningLocks = {} -- Track animals currently being spawned to prevent duplicates
 lib.locale()
 
 ---------------------------------------------
--- helper function to check if player is ranch staff
+-- Core Variables
 ---------------------------------------------
-local function isPlayerRanchStaff()
+local animalDataCache = {}
+local followStates = {}
+local transportingAnimals = {}
+local isBusy = false
+
+---------------------------------------------
+-- Spawn Manager (New System)
+---------------------------------------------
+local SpawnManager = {
+    entities = {},          -- Stores spawned animal entities with metadata
+    pending = {},          -- Tracks pending spawn requests
+    config = {
+        spawnDistance = 50.0,   -- Distance to spawn animals
+        despawnDistance = 75.0, -- Distance to despawn animals
+        checkInterval = 2000,   -- Check frequency in ms
+        maxConcurrentSpawns = 5 -- Max animals spawning at once
+    }
+}
+
+-- Initialize spawn manager
+function SpawnManager:Initialize()
+    self.entities = {}
+    self.pending = {}
+    
+    -- Clean up any orphaned entities from previous sessions
+    CreateThread(function()
+        Wait(2000) -- Wait for player to fully load
+        self:CleanupOrphanedEntities()
+    end)
+    
+    -- Start the spawn check thread
+    CreateThread(function()
+        while true do
+            self:CheckSpawnRequests()
+            Wait(self.config.checkInterval)
+        end
+    end)
+    
+    if Config.Debug then
+        print('^2[SPAWN MANAGER]^7 Initialized new spawn system')
+    end
+end
+
+-- Check what animals need to be spawned/despawned
+function SpawnManager:CheckSpawnRequests()
+    if not cache.ped or not DoesEntityExist(cache.ped) or #animalDataCache == 0 then
+        return
+    end
+    
+    local playerCoords = GetEntityCoords(cache.ped)
+    local pendingCount = self:GetPendingCount()
+    
+    for _, animalData in ipairs(animalDataCache) do
+        if self:IsValidAnimalData(animalData) then
+            local animalId = tostring(animalData.animalid)
+            local animalPos = vector3(animalData.pos_x, animalData.pos_y, animalData.pos_z)
+            local distance = #(playerCoords - animalPos)
+            
+            -- Check if we should spawn this animal
+            if distance <= self.config.spawnDistance then
+                if not self.entities[animalId] and not self.pending[animalId] then
+                    if pendingCount < self.config.maxConcurrentSpawns then
+                        self:RequestSpawn(animalId, animalData)
+                        pendingCount = pendingCount + 1
+                    end
+                end
+            -- Check if we should despawn this animal
+            elseif distance > self.config.despawnDistance then
+                if self.entities[animalId] then
+                    -- Don't despawn if animal is being transported or following
+                    if not transportingAnimals[animalId] and not followStates[animalId] then
+                        self:DespawnAnimal(animalId)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Validate animal data
+function SpawnManager:IsValidAnimalData(data)
+    return data and data.animalid and data.model and 
+           data.pos_x and data.pos_y and data.pos_z and
+           type(data.pos_x) == 'number' and type(data.pos_y) == 'number' and type(data.pos_z) == 'number'
+end
+
+-- Request to spawn an animal
+function SpawnManager:RequestSpawn(animalId, animalData)
+    if self.pending[animalId] then return end
+    
+    self.pending[animalId] = {
+        data = animalData,
+        timestamp = GetGameTimer()
+    }
+    
+    TriggerServerEvent('rex-ranch:server:requestAnimalSpawn', animalId, animalData)
+    
+    if Config.Debug then
+        print('^3[SPAWN MANAGER]^7 Requested spawn for animal ' .. animalId)
+    end
+end
+
+-- Spawn an animal entity
+function SpawnManager:SpawnAnimal(animalId, animalData)
+    local entity = self:CreateAnimalEntity(animalData)
+    if not entity then
+        if Config.Debug then
+            print('^1[SPAWN MANAGER]^7 Failed to create entity for animal ' .. animalId)
+        end
+        return false
+    end
+    
+    -- Store entity with metadata
+    self.entities[animalId] = {
+        entity = entity,
+        data = animalData,
+        spawnTime = GetGameTimer(),
+        networkId = NetworkGetNetworkIdFromEntity(entity)
+    }
+    
+    -- Clean up pending request
+    self.pending[animalId] = nil
+    
+    -- Setup interaction
+    self:SetupAnimalInteraction(entity, animalData)
+    
+    if Config.Debug then
+        print('^2[SPAWN MANAGER]^7 Spawned animal ' .. animalId .. ' (entity: ' .. entity .. ')')
+    end
+    
+    return true
+end
+
+-- Create the actual animal entity
+function SpawnManager:CreateAnimalEntity(animalData)
+    local model = GetHashKey(animalData.model)
+    
+    -- Request model
+    lib.requestModel(model, 5000)
+    if not HasModelLoaded(model) then
+        return nil
+    end
+    
+    -- Create the ped
+    local entity = CreatePed(
+        model,
+        animalData.pos_x,
+        animalData.pos_y,
+        animalData.pos_z - 1.0,
+        animalData.pos_w or 0,
+        false,
+        false,
+        0,
+        0
+    )
+    
+    if not DoesEntityExist(entity) then
+        return nil
+    end
+    
+    -- Configure entity
+    self:ConfigureAnimalEntity(entity, animalData)
+    
+    return entity
+end
+
+-- Configure animal entity properties
+function SpawnManager:ConfigureAnimalEntity(entity, animalData)
+    -- Network registration
+    NetworkRegisterEntityAsNetworked(entity)
+    SetNetworkIdExistsOnAllMachines(NetworkGetNetworkIdFromEntity(entity), true)
+    
+    -- Scale handling
+    local scale = tonumber(animalData.scale) or 1.0
+    if scale <= 0 or scale ~= scale then scale = 1.0 end
+    scale = math.min(math.max(scale, 0.1), 2.0)
+    SetPedScale(entity, scale)
+    
+    -- Entity properties
+    SetEntityAsMissionEntity(entity, true, true)
+    SetEntityInvincible(entity, false)
+    FreezeEntityPosition(entity, false)
+    SetPedOutfitPreset(entity, 0)
+    SetRelationshipBetweenGroups(1, GetPedRelationshipGroupHash(entity), joaat('PLAYER'))
+    
+    -- Fade in effect
+    if Config.AnimalFadeIn then
+        SetEntityAlpha(entity, 0, false)
+        CreateThread(function()
+            for i = 0, 255, 51 do
+                if DoesEntityExist(entity) then
+                    SetEntityAlpha(entity, i, false)
+                    Wait(50)
+                end
+            end
+        end)
+    end
+end
+
+-- Setup animal interaction (ox_target)
+function SpawnManager:SetupAnimalInteraction(entity, animalData)
+    exports.ox_target:addLocalEntity(entity, {
+        {
+            name = 'ranch_animal',
+            icon = 'far fa-eye',
+            label = 'Animal Actions',
+            onSelect = function()
+                TriggerEvent('rex-ranch:client:animalmenu', entity, animalData)
+            end,
+            canInteract = function()
+                return isPlayerRanchStaff()
+            end,
+            distance = 2.0
+        }
+    })
+end
+
+-- Despawn an animal
+function SpawnManager:DespawnAnimal(animalId)
+    local animalInfo = self.entities[animalId]
+    if not animalInfo then return end
+    
+    local entity = animalInfo.entity
+    if DoesEntityExist(entity) then
+        -- Remove interaction
+        exports.ox_target:removeLocalEntity(entity, 'ranch_animal')
+        
+        -- Fade out effect
+        if Config.AnimalFadeIn then
+            CreateThread(function()
+                for i = 255, 0, -51 do
+                    if DoesEntityExist(entity) then
+                        SetEntityAlpha(entity, i, false)
+                        Wait(50)
+                    end
+                end
+                if DoesEntityExist(entity) then
+                    DeletePed(entity)
+                end
+            end)
+        else
+            DeletePed(entity)
+        end
+    end
+    
+    -- Clean up data
+    self.entities[animalId] = nil
+    
+    if Config.Debug then
+        print('^1[SPAWN MANAGER]^7 Despawned animal ' .. animalId)
+    end
+end
+
+-- Get count of pending spawns
+function SpawnManager:GetPendingCount()
+    local count = 0
+    for _ in pairs(self.pending) do
+        count = count + 1
+    end
+    return count
+end
+
+-- Clean up stale pending requests
+function SpawnManager:CleanupPendingRequests()
+    local currentTime = GetGameTimer()
+    local timeout = 10000 -- 10 second timeout
+    
+    for animalId, requestData in pairs(self.pending) do
+        if (currentTime - requestData.timestamp) > timeout then
+            self.pending[animalId] = nil
+            if Config.Debug then
+                print('^3[SPAWN MANAGER]^7 Cleaned up stale spawn request for animal ' .. animalId)
+            end
+        end
+    end
+end
+
+-- Get animal entity by ID (for other systems)
+function SpawnManager:GetEntityById(animalId)
+    local animalInfo = self.entities[tostring(animalId)]
+    if animalInfo and DoesEntityExist(animalInfo.entity) then
+        return animalInfo.entity
+    end
+    return nil
+end
+
+-- Remove specific animal (for selling/deletion)
+function SpawnManager:RemoveAnimal(animalId)
+    local animalKey = tostring(animalId)
+    
+    if self.entities[animalKey] then
+        self:DespawnAnimal(animalKey)
+    end
+    
+    -- Clean up related states
+    followStates[animalKey] = nil
+    transportingAnimals[animalKey] = nil
+    
+    -- Remove from cache
+    for i, cachedAnimal in ipairs(animalDataCache) do
+        if tostring(cachedAnimal.animalid) == animalKey then
+            table.remove(animalDataCache, i)
+            break
+        end
+    end
+    
+    if Config.Debug then
+        print('^2[SPAWN MANAGER]^7 Removed animal ' .. animalId .. ' completely')
+    end
+end
+
+-- Clear all spawned animals
+function SpawnManager:ClearAll()
+    for animalId in pairs(self.entities) do
+        self:DespawnAnimal(animalId)
+    end
+    self.pending = {}
+    
+    if Config.Debug then
+        print('^3[SPAWN MANAGER]^7 Cleared all spawned animals')
+    end
+end
+
+-- Clean up orphaned animal entities (for startup)
+function SpawnManager:CleanupOrphanedEntities()
+    if not cache.ped or not DoesEntityExist(cache.ped) then
+        return
+    end
+    
+    local playerCoords = GetEntityCoords(cache.ped)
+    local cleanedCount = 0
+    
+    -- Check for nearby animal entities that might be orphaned
+    for radius = 10, 200, 25 do
+        local nearbyPeds = GetGamePool('CPed')
+        
+        for _, entity in ipairs(nearbyPeds) do
+            if DoesEntityExist(entity) and entity ~= cache.ped then
+                local entityCoords = GetEntityCoords(entity)
+                local distance = #(playerCoords - entityCoords)
+                
+                if distance <= radius then
+                    local model = GetEntityModel(entity)
+                    
+                    -- Check if it's a known ranch animal model from Config
+                    local isRanchAnimal = false
+                    
+                    -- Check against models defined in Config.AnimalProducts
+                    if Config.AnimalProducts then
+                        for animalModel, _ in pairs(Config.AnimalProducts) do
+                            if model == GetHashKey(animalModel) then
+                                isRanchAnimal = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    -- Fallback check for common ranch animals if Config is not available
+                    if not isRanchAnimal then
+                        for _, animalModel in pairs({'a_c_bull_01', 'a_c_cow', 'a_c_pig_01', 'a_c_sheep_01', 'a_c_hen_01', 'a_c_rooster_01', 'a_c_goat_01'}) do
+                            if model == GetHashKey(animalModel) then
+                                isRanchAnimal = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    if isRanchAnimal then
+                        -- Check if this entity is tracked by our spawn manager
+                        local isTracked = false
+                        for _, spawnData in pairs(self.entities) do
+                            if spawnData.entity == entity then
+                                isTracked = true
+                                break
+                            end
+                        end
+                        
+                        -- If it's not tracked, it's likely orphaned from a previous session
+                        if not isTracked then
+                            -- Remove any ox_target interactions
+                            exports.ox_target:removeLocalEntity(entity, 'ranch_animal')
+                            
+                            -- Delete the orphaned entity
+                            DeletePed(entity)
+                            cleanedCount = cleanedCount + 1
+                            
+                            if Config.Debug then
+                                print('^1[SPAWN MANAGER]^7 Cleaned up orphaned animal entity: ' .. entity .. ' (model: ' .. model .. ')')
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    if Config.Debug and cleanedCount > 0 then
+        print('^3[SPAWN MANAGER]^7 Startup cleanup completed - removed ' .. cleanedCount .. ' orphaned animal entities')
+    elseif Config.Debug then
+        print('^2[SPAWN MANAGER]^7 Startup cleanup completed - no orphaned entities found')
+    end
+end
+
+---------------------------------------------
+-- Helper Functions
+---------------------------------------------
+-- Make isPlayerRanchStaff global so ox_target can access it
+function isPlayerRanchStaff()
     local PlayerData = RSGCore.Functions.GetPlayerData()
     if not PlayerData or not PlayerData.job then
         return false
@@ -18,7 +419,6 @@ local function isPlayerRanchStaff()
     
     local playerjob = PlayerData.job.name
     
-    -- Check if player's job matches any ranch job access
     for _, ranchData in pairs(Config.RanchLocations) do
         if playerjob == ranchData.jobaccess then
             return true
@@ -28,11 +428,17 @@ local function isPlayerRanchStaff()
     return false
 end
 
----------------------------------------------
--- helper function to finalize animal menu display
----------------------------------------------
+local function getFreshAnimalData(animalid)
+    local targetId = tostring(animalid)
+    for _, cachedAnimal in ipairs(animalDataCache) do
+        if tostring(cachedAnimal.animalid) == targetId then
+            return cachedAnimal
+        end
+    end
+    return nil
+end
+
 local function finalizeAnimalMenu(menuOptions, freshData, animal)
-    -- Add separator and actions
     table.insert(menuOptions, {
         title = '─────────────────────────',
         disabled = true
@@ -46,7 +452,6 @@ local function finalizeAnimalMenu(menuOptions, freshData, animal)
         arrow = true
     })
     
-    -- Display the menu
     lib.registerContext({
         id = 'animal_info_menu',
         title = 'Ranch Animal #'..freshData.animalid,
@@ -56,358 +461,111 @@ local function finalizeAnimalMenu(menuOptions, freshData, animal)
 end
 
 ---------------------------------------------
--- on player load refresh animals
+-- Server Communication Events
 ---------------------------------------------
+
+-- Player loaded - initialize system
 RegisterNetEvent('RSGCore:Client:OnPlayerLoaded', function()
+    SpawnManager:Initialize()
     TriggerServerEvent('rex-ranch:server:refreshAnimals')
 end)
 
----------------------------------------------
--- force refresh animals from server
----------------------------------------------
-RegisterNetEvent('rex-ranch:client:refreshAnimals', function()  
-    -- Notify server of all animals we're clearing (if we own them)
-    for animalKey, animalData in pairs(spawnedAnimals) do
-        if animalData and animalData.isOwner then
-            TriggerServerEvent('rex-ranch:server:animalDespawned', animalKey)
-        end
-        
-        if animalData and animalData.spawnedAnimal and DoesEntityExist(animalData.spawnedAnimal) then
-            exports.ox_target:removeLocalEntity(animalData.spawnedAnimal, 'ranch_animal')
-            DeletePed(animalData.spawnedAnimal)
-            if Config.Debug then
-                print('^1[ANIMAL DEBUG]^7 Force removed animal entity: ' .. animalKey)
-            end
-        end
-    end
-    -- Clear all tracking data
-    spawnedAnimals = {}
-    followStates = {}
-    spawningLocks = {}
-    -- Request fresh animal data from server
-    TriggerServerEvent('rex-ranch:server:refreshAnimals')
-end)
-
----------------------------------------------
--- check distance, spawn animal, and track position
----------------------------------------------
-CreateThread(function()
-    while true do
-        -- Reduce check frequency when no animals are cached or player is inactive
-        local waitTime = (#animalDataCache > 0 and IsPedInAnyVehicle(cache.ped, false)) and 2000 or 1000
-        Wait(waitTime)
-        
-        if cache.ped and DoesEntityExist(cache.ped) then
-            local playerCoords = GetEntityCoords(cache.ped)
-            for k, loadData in pairs(animalDataCache) do
-                -- Comprehensive validation of loadData before processing
-                if loadData and loadData.pos_x and loadData.pos_y and loadData.pos_z and 
-                   loadData.animalid and loadData.model and
-                   type(loadData.pos_x) == 'number' and type(loadData.pos_y) == 'number' and type(loadData.pos_z) == 'number' then
-                    
-                    local animalCoords = vector3(loadData.pos_x, loadData.pos_y, loadData.pos_z)
-                    local distance = #(playerCoords - animalCoords)
-                    
-                    -- Use consistent string key for animal ID
-                    local animalKey = tostring(loadData.animalid or k)
-                    
-                    -- Request server-controlled spawn to prevent duplicates
-                    if distance < Config.AnimalDistanceSpawn and not spawnedAnimals[animalKey] and not spawningLocks[animalKey] then
-                        spawningLocks[animalKey] = true
-                        
-                        -- Request spawn permission from server
-                        RSGCore.Functions.TriggerCallback('rex-ranch:server:requestAnimalSpawn', function(canSpawn, spawnData)
-                            if canSpawn and spawnData then
-                                local spawnedAnimal = NearAnimal(spawnData)
-                                
-                                if spawnedAnimal and DoesEntityExist(spawnedAnimal) then
-                                    -- Wait for network registration to complete
-                                    Wait(100)
-                                    
-                                    local networkId = NetworkGetNetworkIdFromEntity(spawnedAnimal)
-                                    spawnedAnimals[animalKey] = { 
-                                        spawnedAnimal = spawnedAnimal, 
-                                        isOwner = true,
-                                        networkId = networkId
-                                    }
-                                    
-                                    -- Register the network ID with server for cross-client sync
-                                    TriggerServerEvent('rex-ranch:server:registerAnimalNetworkId', animalKey, networkId)
-                                    
-                                    -- Debug spawning
-                                    if Config.Debug then
-                                        print('^2[ANIMAL DEBUG]^7 Spawned animal ' .. animalKey .. ' (entity: ' .. spawnedAnimal .. ', networkId: ' .. networkId .. ') at distance ' .. math.floor(distance * 10) / 10 .. 'm - CLIENT OWNER')
-                                    end
-                                else
-                                    -- Failed to spawn, notify server
-                                    TriggerServerEvent('rex-ranch:server:animalSpawnFailed', animalKey)
-                                    if Config.Debug then
-                                        print('^1[ANIMAL DEBUG]^7 Failed to spawn animal ' .. animalKey .. ' at distance ' .. math.floor(distance * 10) / 10 .. 'm')
-                                    end
-                                end
-                            elseif Config.Debug then
-                                print('^3[ANIMAL DEBUG]^7 Server denied spawn for animal ' .. animalKey .. ' (already owned by another client)')
-                            end
-                            
-                            -- Always clear the lock
-                            spawningLocks[animalKey] = nil
-                        end, animalKey, loadData)
-                    end
-                    
-                    -- despawn animal if out of range (but only if we own it and not being transported)
-                    local isTransporting = transportingAnimals[animalKey] or followStates[animalKey]
-                    if distance >= Config.AnimalDistanceSpawn and spawnedAnimals[animalKey] and spawnedAnimals[animalKey].isOwner and not (Config.TransportMode and isTransporting) then
-                        -- Notify server we're despawning our owned animal
-                        TriggerServerEvent('rex-ranch:server:animalDespawned', animalKey)
-                        
-                        if DoesEntityExist(spawnedAnimals[animalKey].spawnedAnimal) then
-                            if Config.AnimalFadeIn then
-                                for i = 255, 0, -51 do
-                                    Wait(50)
-                                    if DoesEntityExist(spawnedAnimals[animalKey].spawnedAnimal) then
-                                        SetEntityAlpha(spawnedAnimals[animalKey].spawnedAnimal, i, false)
-                                    end
-                                end
-                            end
-                            DeletePed(spawnedAnimals[animalKey].spawnedAnimal)
-                            
-                            if Config.Debug then
-                                print('^1[ANIMAL DEBUG]^7 Despawned owned animal ' .. animalKey .. ' (too far: ' .. math.floor(distance * 10) / 10 .. 'm)')
-                            end
-                        end
-                        spawnedAnimals[animalKey] = nil
-                    end
-                end
-            end
-        end
-    end
-end)
-
----------------------------------------------
--- animal spawner
----------------------------------------------
-function NearAnimal(loadData)
-    -- Validate input data
-    if not loadData or not loadData.model or not loadData.pos_x or not loadData.pos_y or not loadData.pos_z then
-        if Config.Debug then
-            print("^1[ERROR]^7 Invalid animal data provided to NearAnimal function")
-        end
-        return nil
-    end
-    
-    local model = GetHashKey(loadData.model)
-    lib.requestModel(model, 5000)
-    if not HasModelLoaded(model) then
-        if Config.Debug then
-            print("^1[ERROR]^7 Failed to load model: " .. tostring(loadData.model))
-        end
-        return nil
-    end
-    
-    local spawnedAnimal = CreatePed(model, tonumber(loadData.pos_x), tonumber(loadData.pos_y), tonumber(loadData.pos_z) - 1.0, tonumber(loadData.pos_w or 0), false, false, 0, 0)
-    if not DoesEntityExist(spawnedAnimal) then
-        if Config.Debug then
-            print("^1[ERROR]^7 Failed to create animal entity")
-        end
-        return nil
-    end
-    
-    -- Register as networked so all players can see the animal
-    NetworkRegisterEntityAsNetworked(spawnedAnimal)
-    SetNetworkIdExistsOnAllMachines(NetworkGetNetworkIdFromEntity(spawnedAnimal), true)
-    
-    -- Store network ID for cross-client reference
-    local networkId = NetworkGetNetworkIdFromEntity(spawnedAnimal)
-    if Config.Debug then
-        print('^2[NETWORK DEBUG]^7 Registered networked animal ' .. tostring(loadData.animalid) .. ' with NetworkID: ' .. networkId)
-    end
-    
-    -- Ensure scale is valid (between 0.1 and 2.0), handle NaN and invalid values
-    local scale = tonumber(loadData.scale)
-    if not scale or scale ~= scale or scale <= 0 then
-        scale = 1.0
-    else
-        scale = math.min(math.max(scale, 0.1), 2.0)
-    end
-    SetPedScale(spawnedAnimal, scale)
-    SetEntityAsMissionEntity(spawnedAnimal, true, true)
-    SetEntityInvincible(spawnedAnimal, false)
-    FreezeEntityPosition(spawnedAnimal, false)
-    SetPedOutfitPreset(spawnedAnimal, 0)
-    SetRelationshipBetweenGroups(1, GetPedRelationshipGroupHash(spawnedAnimal), joaat('PLAYER'))
-    if Config.AnimalFadeIn then
-        for i = 0, 255, 51 do
-            Wait(50)
-            SetEntityAlpha(spawnedAnimal, i, false)
-        end
-    end
-    exports.ox_target:addLocalEntity(spawnedAnimal, {
-        {
-            name = 'ranch_animal',
-            icon = 'far fa-eye',
-            label = 'Animal Actions',
-            onSelect = function()
-                TriggerEvent('rex-ranch:client:animalmenu', spawnedAnimal, loadData)
-            end,
-            canInteract = function()
-                return isPlayerRanchStaff()
-            end,
-            distance = 2.0
-        }
-    })
-    return spawnedAnimal
-end
-
----------------------------------------------
--- handle networked animal spawned by another client
----------------------------------------------
-RegisterNetEvent('rex-ranch:client:animalNetworkSpawned', function(animalKey, networkId, ownerId)
-    local src = GetPlayerServerId(PlayerId())
-    
-    -- Don't process our own spawns
-    if ownerId == src then return end
-    
-    -- Check if we can see this networked entity
-    local entity = NetworkGetEntityFromNetworkId(networkId)
-    if entity and DoesEntityExist(entity) then
-        -- Track this as a non-owned networked animal
-        spawnedAnimals[animalKey] = {
-            spawnedAnimal = entity,
-            isOwner = false,
-            networkId = networkId,
-            ownerId = ownerId
-        }
-        
-        -- Add interaction target for the networked animal
-        local animalData = getFreshAnimalData(animalKey)
-        if animalData then
-            exports.ox_target:addLocalEntity(entity, {
-                {
-                    name = 'ranch_animal',
-                    icon = 'far fa-eye',
-                    label = 'Animal Actions',
-                    onSelect = function()
-                        TriggerEvent('rex-ranch:client:animalmenu', entity, animalData)
-                    end,
-                    canInteract = function()
-                        return isPlayerRanchStaff()
-                    end,
-                    distance = 2.0
-                }
-            })
-        end
-        
-        if Config.Debug then
-            print('^3[NETWORK DEBUG]^7 Received networked animal ' .. animalKey .. ' (networkId: ' .. networkId .. ') from player ' .. ownerId)
-        end
-    elseif Config.Debug then
-        print('^1[NETWORK DEBUG]^7 Could not find networked entity for animal ' .. animalKey .. ' (networkId: ' .. networkId .. ')')
-    end
-end)
-
----------------------------------------------
--- handle networked animal despawned by another client
----------------------------------------------
-RegisterNetEvent('rex-ranch:client:animalNetworkDespawned', function(animalKey, networkId)
-    if spawnedAnimals[animalKey] and not spawnedAnimals[animalKey].isOwner then
-        -- Remove target and clear tracking for non-owned networked animal
-        if spawnedAnimals[animalKey].spawnedAnimal and DoesEntityExist(spawnedAnimals[animalKey].spawnedAnimal) then
-            exports.ox_target:removeLocalEntity(spawnedAnimals[animalKey].spawnedAnimal, 'ranch_animal')
-        end
-        spawnedAnimals[animalKey] = nil
-        
-        if Config.Debug then
-            print('^3[NETWORK DEBUG]^7 Removed networked animal ' .. animalKey .. ' (networkId: ' .. networkId .. ') tracking')
-        end
-    end
-end)
-
----------------------------------------------
--- move animal data to cache
----------------------------------------------
+-- Receive animal data from server
 RegisterNetEvent('rex-ranch:client:spawnAnimals', function(animalData)
-    -- Debug: Check pregnancy status in received data
-    if Config.Debug then
-        for _, animal in ipairs(animalData) do
-            if animal.pregnant == 1 then
-                print('^3[CLIENT DEBUG]^7 Received pregnant animal ' .. animal.animalid .. ' (pregnant: ' .. tostring(animal.pregnant) .. ', gestation_end_time: ' .. tostring(animal.gestation_end_time) .. ')')
-            end
-        end
-    end
-    
-    -- Update the cache
     animalDataCache = animalData
     
-    -- Convert array to keyed table for easier lookup (ensure string keys)
-    local keyedData = {}
-    for _, animal in ipairs(animalData) do
-        local animalKey = tostring(animal.animalid)
-        keyedData[animalKey] = animal
+    if Config.Debug then
+        print('^2[SPAWN MANAGER]^7 Received ' .. #animalData .. ' animals from server')
     end
+end)
+
+-- Server grants spawn permission
+RegisterNetEvent('rex-ranch:client:spawnAnimalGranted', function(animalId, animalData)
+    SpawnManager:SpawnAnimal(animalId, animalData)
+end)
+
+-- Server denies spawn request
+RegisterNetEvent('rex-ranch:client:spawnAnimalDenied', function(animalId, reason)
+    SpawnManager.pending[animalId] = nil
     
-    -- Check for animals that no longer exist in the database and remove them
-    local animalsToRemove = {}
-    for animalKey, _ in pairs(spawnedAnimals) do
-        local found = false
-        for _, animal in ipairs(animalData) do
-            if tostring(animal.animalid) == animalKey then
-                found = true
-                break
-            end
-        end
-        if not found then
-            table.insert(animalsToRemove, animalKey)
-        end
+    if Config.Debug then
+        print('^3[SPAWN MANAGER]^7 Spawn denied for animal ' .. animalId .. ': ' .. (reason or 'unknown'))
     end
-    
-    -- Remove animals that are no longer in the database
-    for _, animalKey in ipairs(animalsToRemove) do
-        if spawnedAnimals[animalKey] and DoesEntityExist(spawnedAnimals[animalKey].spawnedAnimal) then
-            exports.ox_target:removeLocalEntity(spawnedAnimals[animalKey].spawnedAnimal, 'ranch_animal')
-            DeletePed(spawnedAnimals[animalKey].spawnedAnimal)
-            if Config.Debug then
-                print('^1[ANIMAL DEBUG]^7 Removed stale animal entity: ' .. animalKey)
-            end
-        end
-        spawnedAnimals[animalKey] = nil
-        followStates[animalKey] = nil
-        transportingAnimals[animalKey] = nil
-        spawningLocks[animalKey] = nil -- Clear spawning locks too
-    end
-    
-    -- Update individual animal data in the cache for existing animals
+end)
+
+-- Force refresh animals from server
+RegisterNetEvent('rex-ranch:client:refreshAnimals', function()
+    SpawnManager:ClearAll()
+    TriggerServerEvent('rex-ranch:server:refreshAnimals')
+end)
+
+-- Remove specific animal
+RegisterNetEvent('rex-ranch:client:removeAnimal', function(animalid)
+    SpawnManager:RemoveAnimal(animalid)
+end)
+
+-- Update single animal data
+RegisterNetEvent('rex-ranch:client:refreshSingleAnimal', function(animalid, updatedData)
     for i, cachedAnimal in ipairs(animalDataCache) do
-        local animalKey = tostring(cachedAnimal.animalid)
-        if keyedData[animalKey] then
-            animalDataCache[i] = keyedData[animalKey]
+        if cachedAnimal.animalid == animalid then
+            for key, value in pairs(updatedData) do
+                animalDataCache[i][key] = value
+            end
+            break
         end
     end
 end)
 
----------------------------------------------
--- get fresh animal data from cache
----------------------------------------------
-local function getFreshAnimalData(animalid)
+-- Update animal status (breeding, etc)
+RegisterNetEvent('rex-ranch:client:updateAnimalStatus', function(animalid, updatedData)
     local targetId = tostring(animalid)
-    for _, cachedAnimal in ipairs(animalDataCache) do
+    
+    for i, cachedAnimal in ipairs(animalDataCache) do
         if tostring(cachedAnimal.animalid) == targetId then
-            return cachedAnimal
+            for key, value in pairs(updatedData) do
+                animalDataCache[i][key] = value
+            end
+            
+            if Config.Debug then
+                print('^2[SPAWN MANAGER]^7 Updated animal ' .. animalid .. ' status in cache')
+            end
+            break
         end
     end
-    return nil
-end
+    
+    lib.hideContext()
+end)
+
+-- Set transport mode (prevents despawning)
+RegisterNetEvent('rex-ranch:client:setAnimalTransporting', function(animalIds, transporting)
+    if type(animalIds) == 'table' then
+        for _, animalId in ipairs(animalIds) do
+            local key = tostring(animalId)
+            transportingAnimals[key] = transporting or nil
+        end
+    else
+        local key = tostring(animalIds)
+        transportingAnimals[key] = transporting or nil
+    end
+    
+    if Config.Debug then
+        local count = 0
+        for _ in pairs(transportingAnimals) do count = count + 1 end
+        print('^2[SPAWN MANAGER]^7 Transport mode animals: ' .. count)
+    end
+end)
 
 ---------------------------------------------
--- animal menu
+-- Animal Interaction Events
 ---------------------------------------------
+
+-- Animal menu
 RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
-    -- Validate inputs
     if not DoesEntityExist(animal) or not data or not data.animalid then
         lib.notify({ title = 'Error', description = 'Invalid animal data!', type = 'error' })
         return
     end
     
-    -- Get fresh data from cache in case it was updated
     local freshData = getFreshAnimalData(data.animalid) or data
     
     -- Ensure required fields exist
@@ -417,138 +575,36 @@ RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
     freshData.age = freshData.age or 0
     freshData.animalid = freshData.animalid or data.animalid
     
-    -- Use database age field (calculated server-side)
     local actualAge = freshData.age or 0
-    
-    -- Get gender info
     local genderText = freshData.gender and freshData.gender:gsub("^%l", string.upper) or 'Unknown'
-    -- Handle both boolean and integer pregnancy values from database
     local isPregnant = (freshData.pregnant == 1 or freshData.pregnant == true)
     local pregnantStatus = isPregnant and 'Pregnant' or 'Not Pregnant'
     
-    -- Debug pregnancy status
-    if Config.Debug and freshData.gender == 'female' then
-        print('^3[MENU DEBUG]^7 Animal ' .. freshData.animalid .. ' - pregnant field: ' .. tostring(freshData.pregnant) .. ', status: ' .. pregnantStatus)
-    end
-    
-    -- Breeding status calculation (simplified to avoid client-side time issues)
-    local breedingStatus = 'Unknown'
-    local canBreed = false
-    local breedingDescription = ''
-    
-    if Config.BreedingEnabled then
-        local isPregnant = freshData.gender == 'female' and (freshData.pregnant == 1 or freshData.pregnant == true)
-        canBreed = not isPregnant
-        
-        if isPregnant then
-            breedingStatus = 'Pregnant'
-            breedingDescription = 'Expecting offspring soon'
-        elseif freshData.gender == 'male' then
-            breedingStatus = 'Male - Ready'
-            breedingDescription = 'Can participate in breeding'
-        else
-            -- Check breeding requirements for females
-            local breedingIssues = {}
-            
-            if Config.MinAgeForBreeding and actualAge < Config.MinAgeForBreeding then
-                canBreed = false
-                table.insert(breedingIssues, 'Too young (need ' .. Config.MinAgeForBreeding .. ' days)')
-            elseif Config.MaxBreedingAge and actualAge > Config.MaxBreedingAge then
-                canBreed = false
-                table.insert(breedingIssues, 'Too old (max ' .. Config.MaxBreedingAge .. ' days)')
-            end
-            
-            if Config.RequireHealthForBreeding and (freshData.health or 100) < Config.RequireHealthForBreeding then
-                canBreed = false
-                table.insert(breedingIssues, 'Health too low (need ' .. Config.RequireHealthForBreeding .. '%)')
-            end
-            
-            if Config.RequireHungerForBreeding and (freshData.hunger or 100) < Config.RequireHungerForBreeding then
-                canBreed = false
-                table.insert(breedingIssues, 'Hunger too low (need ' .. Config.RequireHungerForBreeding .. '%)')
-            end
-            
-            if Config.RequireThirstForBreeding and (freshData.thirst or 100) < Config.RequireThirstForBreeding then
-                canBreed = false
-                table.insert(breedingIssues, 'Thirst too low (need ' .. Config.RequireThirstForBreeding .. '%)')
-            end
-
-            if canBreed and #breedingIssues == 0 then
-                breedingStatus = 'Ready to Breed'
-                breedingDescription = 'All requirements met for breeding'
-            else
-                breedingStatus = 'Not Ready'
-                breedingDescription = table.concat(breedingIssues, ', ')
-            end
-        end
-        
-        -- Also allow males to breed (not just females)
-        if freshData.gender == 'male' then
-            local maleIssues = {}
-            
-            if Config.MinAgeForBreeding and actualAge < Config.MinAgeForBreeding then
-                canBreed = false
-                table.insert(maleIssues, 'Too young (need ' .. Config.MinAgeForBreeding .. ' days)')
-            elseif Config.MaxBreedingAge and actualAge > Config.MaxBreedingAge then
-                canBreed = false
-                table.insert(maleIssues, 'Too old (max ' .. Config.MaxBreedingAge .. ' days)')
-            end
-            
-            if Config.RequireHealthForBreeding and (freshData.health or 100) < Config.RequireHealthForBreeding then
-                canBreed = false
-                table.insert(maleIssues, 'Health too low (need ' .. Config.RequireHealthForBreeding .. '%)')
-            end
-            
-            if Config.RequireHungerForBreeding and (freshData.hunger or 100) < Config.RequireHungerForBreeding then
-                canBreed = false
-                table.insert(maleIssues, 'Hunger too low (need ' .. Config.RequireHungerForBreeding .. '%)')
-            end
-            
-            if Config.RequireThirstForBreeding and (freshData.thirst or 100) < Config.RequireThirstForBreeding then
-                canBreed = false
-                table.insert(maleIssues, 'Thirst too low (need ' .. Config.RequireThirstForBreeding .. '%)')
-            end
-            
-            -- Skip client-side cooldown check for males too
-            -- Server will validate cooldown timing
-            
-            if #maleIssues > 0 then
-                breedingStatus = 'Male - Not Ready'
-                breedingDescription = table.concat(maleIssues, ', ')
-                canBreed = false
-            end
-        end
-    else
-        breedingStatus = 'Disabled'
-        breedingDescription = 'Breeding system is disabled'
-    end
-    
-    -- animal age
+    -- Animal age categories
     local ageText = 'Youth'
     if actualAge < 5 then ageText = 'Youth' end
     if actualAge >= 5 then ageText = 'Adult' end
-    -- health colorScheme
+    
+    -- Health status colors
     local healthColorScheme = 'green'
     if freshData.health > 80 then healthColorScheme = 'green' end
     if freshData.health <= 80 and freshData.health > 10 then healthColorScheme = 'yellow' end
     if freshData.health <= 10 then healthColorScheme = 'red' end
     freshData.health = math.min(math.max(freshData.health or 100, 0), 100)
-
-    -- thirst colorScheme
+    
     local thirstColorScheme = 'green'
     if freshData.thirst > 80 then thirstColorScheme = 'green' end
     if freshData.thirst <= 80 and freshData.thirst > 10 then thirstColorScheme = 'yellow' end
     if freshData.thirst <= 10 then thirstColorScheme = 'red' end
     freshData.thirst = math.min(math.max(freshData.thirst or 100, 0), 100)
-
-    -- hunger colorScheme
+    
     local hungerColorScheme = 'green'
     if freshData.hunger > 80 then hungerColorScheme = 'green' end
     if freshData.hunger <= 80 and freshData.hunger > 10 then hungerColorScheme = 'yellow' end
     if freshData.hunger <= 10 then hungerColorScheme = 'red' end
     freshData.hunger = math.min(math.max(freshData.hunger or 100, 0), 100)
-
-    -- Build menu options dynamically
+    
+    -- Build menu options
     local menuOptions = {
         {
             title = 'Animal Information',
@@ -720,49 +776,20 @@ else
 end
 end)
 
----------------------------------------------
--- animal action menu
----------------------------------------------
+-- Animal actions menu
 RegisterNetEvent('rex-ranch:client:actionsmenu', function(data)
     local animalid = data.animalid
     local animal = data.animal
     
-    -- Get fresh data from cache in case it was updated
     local freshData = getFreshAnimalData(animalid)
     if not freshData then
         lib.notify({ title = 'Error', description = 'Animal data not found!', type = 'error' })
         return
     end
     
-    -- Get current stats for descriptions
     local hungerStatus = freshData.hunger > 80 and 'Well Fed' or freshData.hunger > 50 and 'Hungry' or 'Starving'
     local thirstStatus = freshData.thirst > 80 and 'Hydrated' or freshData.thirst > 50 and 'Thirsty' or 'Dehydrated'
     local followStatus = followStates[animalid] and 'Following' or 'Idle'
-    
-    -- Use database age field (calculated server-side)
-    local actualAge = freshData.age or 0
-    
-    -- Get breeding status
-    local breedingStatus = 'Unknown'
-    
-    if freshData.gender == 'male' then
-        breedingStatus = 'Male - Breeding Disabled'
-    elseif Config.BreedingEnabled and Config.MinAgeForBreeding and Config.MaxBreedingAge and actualAge >= Config.MinAgeForBreeding and actualAge <= Config.MaxBreedingAge then
-        if freshData.gender == 'female' and freshData.pregnant == 1 then
-            breedingStatus = 'Pregnant'
-        elseif freshData.breeding_ready_time and freshData.breeding_ready_time > 0 then
-            -- Note: Server handles cooldown timing, just show that there is a cooldown
-            breedingStatus = 'Cooldown Active'
-        else
-            breedingStatus = 'Ready to Breed'
-        end
-    elseif Config.MinAgeForBreeding and actualAge < Config.MinAgeForBreeding then
-        breedingStatus = 'Too Young'
-    elseif Config.MaxBreedingAge and actualAge > Config.MaxBreedingAge then
-        breedingStatus = 'Too Old'
-    else
-        breedingStatus = 'Breeding Disabled'
-    end
     
     lib.registerContext({
         id = 'animal_action_menu',
@@ -810,27 +837,25 @@ RegisterNetEvent('rex-ranch:client:actionsmenu', function(data)
     lib.showContext('animal_action_menu')
 end)
 
----------------------------------------------
--- set animal to follow you
----------------------------------------------
+-- Animal follow system
 RegisterNetEvent('rex-ranch:client:animalfollow', function(data)
-    -- validate entities
     if not DoesEntityExist(data.animal) or not DoesEntityExist(cache.ped) then
         lib.notify({ title = 'Error', description = 'Invalid animal or player!', type = 'error' })
         return
     end
-    -- check if animal is dead
+    
     if IsPedDeadOrDying(data.animal, true) then
         lib.notify({ title = 'Animal Dead', description = 'This animal is dead!', type = 'error' })
-        return 
+        return
     end
-    -- toggle follow state for this animal
+    
     if followStates[data.animalid] == nil then
         followStates[data.animalid] = false
     end
+    
     followStates[data.animalid] = not followStates[data.animalid]
+    
     if followStates[data.animalid] then
-        local playerCoords = GetEntityCoords(cache.ped)
         local animalOffset = vector3(0.0, 2.0, 0.0)
         ClearPedTasks(data.animal)
         TaskFollowToOffsetOfEntity(data.animal, cache.ped, animalOffset.x, animalOffset.y, animalOffset.z, 1.0, -1, 0.0, 1)
@@ -838,22 +863,18 @@ RegisterNetEvent('rex-ranch:client:animalfollow', function(data)
     else
         local currentPos = GetEntityCoords(data.animal)
         local heading = GetEntityHeading(data.animal)
-        ClearPedTasks(data.animal) -- stop following, let animal idle
+        ClearPedTasks(data.animal)
         TriggerServerEvent('rex-ranch:server:saveAnimalPosition', data.animalid, currentPos.x, currentPos.y, currentPos.z, heading)
         lib.notify({ title = 'Animal Stopped', description = 'The animal stopped following you.', duration = 5000, type = 'info' })
     end
 end)
 
----------------------------------------------
--- feed animal with animation
----------------------------------------------
+-- Feed animal
 RegisterNetEvent('rex-ranch:client:feedAnimal', function(data)
-    local playerPed = cache.ped
     local animal = data.animal
     local animalid = data.animalid
     
-    -- Validate entities
-    if not DoesEntityExist(playerPed) or not DoesEntityExist(animal) then
+    if not DoesEntityExist(cache.ped) or not DoesEntityExist(animal) then
         lib.notify({ title = 'Error', description = 'Invalid player or animal!', type = 'error' })
         return
     end
@@ -876,22 +897,18 @@ RegisterNetEvent('rex-ranch:client:feedAnimal', function(data)
     else
         lib.notify({type = 'error', description = 'You need animal feed to feed the animals!'})
     end
-
 end)
 
----------------------------------------------
--- water animal with animation
----------------------------------------------
+-- Water animal
 RegisterNetEvent('rex-ranch:client:waterAnimal', function(data)
     local animal = data.animal
     local animalid = data.animalid
     
-    -- Validate entities
     if not DoesEntityExist(cache.ped) or not DoesEntityExist(animal) then
         lib.notify({ title = 'Error', description = 'Invalid player or animal!', type = 'error' })
         return
-    end    
-
+    end
+    
     local hasItem = RSGCore.Functions.HasItem('water_bucket', 1)
     if hasItem and not isBusy then
         isBusy = true
@@ -910,35 +927,19 @@ RegisterNetEvent('rex-ranch:client:waterAnimal', function(data)
     else
         lib.notify({type = 'error', description = 'You need water bucket to water the animals!'})
     end
-
 end)
 
----------------------------------------------
--- check animal products
----------------------------------------------
+-- Check products
 RegisterNetEvent('rex-ranch:client:checkProducts', function(data)
     local animalid = data.animalid
     local animal = data.animal
     
-    -- Validate entities
     if not DoesEntityExist(animal) or not animalid then
         lib.notify({ title = 'Error', description = 'Invalid animal!', type = 'error' })
         return
     end
     
     RSGCore.Functions.TriggerCallback('rex-ranch:server:getAnimalProductionStatus', function(productionData)
-        if Config.Debug then
-            print('^3[CLIENT PRODUCTION DEBUG]^7 Production callback result for animal ' .. animalid .. ':')
-            if productionData then
-                print('^3[CLIENT PRODUCTION DEBUG]^7 - hasProduct: ' .. tostring(productionData.hasProduct))
-                print('^3[CLIENT PRODUCTION DEBUG]^7 - productName: ' .. tostring(productionData.productName))
-                print('^3[CLIENT PRODUCTION DEBUG]^7 - canProduce: ' .. tostring(productionData.canProduce))
-                print('^3[CLIENT PRODUCTION DEBUG]^7 - timeUntilNext: ' .. tostring(productionData.timeUntilNext))
-            else
-                print('^1[CLIENT PRODUCTION DEBUG]^7 - productionData is nil/false')
-            end
-        end
-        
         if not productionData then
             lib.notify({ title = 'No Production', description = 'This animal doesn\'t produce anything!', type = 'info' })
             return
@@ -1000,18 +1001,11 @@ RegisterNetEvent('rex-ranch:client:checkProducts', function(data)
     end, animalid)
 end)
 
----------------------------------------------
--- collect animal product with animation
----------------------------------------------
+-- Collect product
 RegisterNetEvent('rex-ranch:client:collectProduct', function(data)
     local animal = data.animal
     local animalid = data.animalid
     
-    if Config.Debug then
-        print('^3[CLIENT COLLECT DEBUG]^7 Starting collection animation for animal ' .. animalid)
-    end
-    
-    -- Validate entities
     if not DoesEntityExist(cache.ped) or not DoesEntityExist(animal) then
         lib.notify({ title = 'Error', description = 'Invalid player or animal!', type = 'error' })
         return
@@ -1028,10 +1022,6 @@ RegisterNetEvent('rex-ranch:client:collectProduct', function(data)
         ClearPedTasks(cache.ped)
         SetCurrentPedWeapon(cache.ped, `WEAPON_UNARMED`, true)
         FreezeEntityPosition(cache.ped, false)
-        if Config.Debug then
-            print('^3[CLIENT COLLECT DEBUG]^7 Sending collection request to server for animal ' .. animalid)
-        end
-        
         TriggerServerEvent('rex-ranch:server:collectProduct', animalid)
         LocalPlayer.state:set('inv_busy', false, true)
         isBusy = false
@@ -1039,254 +1029,112 @@ RegisterNetEvent('rex-ranch:client:collectProduct', function(data)
 end)
 
 ---------------------------------------------
--- refresh single animal data after feeding/watering
----------------------------------------------
-RegisterNetEvent('rex-ranch:client:refreshSingleAnimal', function(animalid, updatedData)
-    for i, cachedAnimal in ipairs(animalDataCache) do
-        if cachedAnimal.animalid == animalid then
-            -- Update the specific fields that were changed
-            for key, value in pairs(updatedData) do
-                animalDataCache[i][key] = value
-            end
-            break
-        end
-    end
-end)
-
----------------------------------------------
--- update animal status (for breeding, etc.)
----------------------------------------------
-RegisterNetEvent('rex-ranch:client:updateAnimalStatus', function(animalid, updatedData)
-    local targetId = tostring(animalid)
-    
-    -- Update the animal cache
-    for i, cachedAnimal in ipairs(animalDataCache) do
-        if tostring(cachedAnimal.animalid) == targetId then
-            -- Update the specific fields that were changed
-            for key, value in pairs(updatedData) do
-                animalDataCache[i][key] = value
-            end
-            
-            if Config.Debug then
-                print('^2[ANIMAL DEBUG]^7 Updated animal ' .. animalid .. ' status in cache')
-            end
-            break
-        end
-    end
-    
-    -- If there's an open menu for this animal, we should close it so the player can reopen with fresh data
-    -- This ensures they see the updated pregnancy status immediately
-    lib.hideContext()
-end)
-
----------------------------------------------
--- remove animal when sold
----------------------------------------------
-RegisterNetEvent('rex-ranch:client:removeAnimal', function(animalid)
-    local animalKey = tostring(animalid)
-    
-    if Config.Debug then
-        print('^1[ANIMAL REMOVAL DEBUG]^7 Received removal request for animal: ' .. animalKey)
-        print('^1[ANIMAL REMOVAL DEBUG]^7 Current spawned animals count: ' .. GetTableLength(spawnedAnimals))
-    end
-    
-    -- Use consistent string key lookup
-    local entityToRemove = nil
-    if spawnedAnimals[animalKey] then
-        if Config.Debug then
-            print('^2[ANIMAL REMOVAL DEBUG]^7 Found animal in spawned table: ' .. animalKey)
-        end
-        
-        if DoesEntityExist(spawnedAnimals[animalKey].spawnedAnimal) then
-            entityToRemove = spawnedAnimals[animalKey].spawnedAnimal
-            if Config.Debug then
-                print('^2[ANIMAL REMOVAL DEBUG]^7 Entity exists, will remove: ' .. entityToRemove)
-            end
-        else
-            if Config.Debug then
-                print('^3[ANIMAL REMOVAL DEBUG]^7 Entity no longer exists for animal: ' .. animalKey)
-            end
-        end
-        spawnedAnimals[animalKey] = nil
-    else
-        if Config.Debug then
-            print('^3[ANIMAL REMOVAL DEBUG]^7 Animal not found in spawned table: ' .. animalKey)
-        end
-    end
-    
-    if entityToRemove then
-        -- Remove target interaction
-        exports.ox_target:removeLocalEntity(entityToRemove, 'ranch_animal')
-        
-        -- Fade out and delete
-        if Config.AnimalFadeIn then
-            CreateThread(function()
-                for i = 255, 0, -51 do
-                    Wait(50)
-                    if DoesEntityExist(entityToRemove) then
-                        SetEntityAlpha(entityToRemove, i, false)
-                    end
-                end
-                if DoesEntityExist(entityToRemove) then
-                    DeletePed(entityToRemove)
-                end
-            end)
-        else
-            DeletePed(entityToRemove)
-        end
-        
-        if Config.Debug then
-            print('^2[ANIMAL REMOVAL DEBUG]^7 Successfully removed animal entity: ' .. animalid .. ' (entity: ' .. entityToRemove .. ')')
-        end
-    else
-        if Config.Debug then
-            print('^1[ANIMAL REMOVAL DEBUG]^7 No entity to remove for animal: ' .. animalid)
-        end
-    end
-    
-    -- Also remove from follow states and transport states
-    followStates[animalKey] = nil
-    transportingAnimals[animalKey] = nil
-    
-    -- Remove from cache
-    local removedFromCache = false
-    for i, cachedAnimal in ipairs(animalDataCache) do
-        if tostring(cachedAnimal.animalid) == animalKey then
-            table.remove(animalDataCache, i)
-            removedFromCache = true
-            break
-        end
-    end
-    
-    if Config.Debug then
-        print('^2[ANIMAL REMOVAL DEBUG]^7 Removal completed for animal ' .. animalKey .. ' - Cache removed: ' .. tostring(removedFromCache))
-        print('^2[ANIMAL REMOVAL DEBUG]^7 New spawned animals count: ' .. GetTableLength(spawnedAnimals))
-        print('^2[ANIMAL REMOVAL DEBUG]^7 New cached animals count: ' .. #animalDataCache)
-    end
-end)
-
----------------------------------------------
--- transport mode events (called from herding system)
----------------------------------------------
-RegisterNetEvent('rex-ranch:client:setAnimalTransporting', function(animalIds, transporting)
-    if type(animalIds) == 'table' then
-        for _, animalId in ipairs(animalIds) do
-            local key = tostring(animalId)
-            transportingAnimals[key] = transporting or nil
-        end
-    else
-        local key = tostring(animalIds)
-        transportingAnimals[key] = transporting or nil
-    end
-    
-    if Config.Debug then
-        local count = 0
-        for _ in pairs(transportingAnimals) do count = count + 1 end
-        print('^2[DEBUG]^7 Transport mode animals: ' .. count)
-    end
-end)
-
----------------------------------------------
--- get animal entity by ID (for herding system)
+-- Export Functions
 ---------------------------------------------
 function GetAnimalEntityById(animalId)
-    -- Convert to string to match key format
-    local key = tostring(animalId)
-    
-    if Config.Debug then
-        print('^3[ANIMAL DEBUG]^7 Looking for animal entity with ID: ' .. key)
-        local count = 0
-        for k, v in pairs(spawnedAnimals) do
-            count = count + 1
-            print('^3[ANIMAL DEBUG]^7 Spawned animal key: ' .. tostring(k) .. ', entity: ' .. tostring(v.spawnedAnimal) .. ', exists: ' .. tostring(DoesEntityExist(v.spawnedAnimal)))
-        end
-        print('^3[ANIMAL DEBUG]^7 Total spawned animals: ' .. count)
-    end
-    
-    if spawnedAnimals[key] and DoesEntityExist(spawnedAnimals[key].spawnedAnimal) then
-        if Config.Debug then
-            print('^2[ANIMAL DEBUG]^7 Found entity for animal ' .. key .. ': ' .. spawnedAnimals[key].spawnedAnimal)
-        end
-        return spawnedAnimals[key].spawnedAnimal
-    end
-    
-    -- No fallback needed - all keys should be consistent strings now
-    
-    if Config.Debug then
-        print('^1[ANIMAL DEBUG]^7 No entity found for animal ID: ' .. key)
-    end
-    return nil
+    return SpawnManager:GetEntityById(animalId)
 end
 
--- Export functions for other modules
 exports('GetAnimalEntityById', GetAnimalEntityById)
 exports('GetAnimalDataCache', function() return animalDataCache end)
 
 ---------------------------------------------
--- Debug command to check animal entities
+-- Debug Commands
 ---------------------------------------------
-RegisterCommand('debuganimals', function()
-    local playerCoords = GetEntityCoords(cache.ped)
-    local nearbyPeds = {}
-    local totalAnimals = 0
-    local orphanedEntities = 0
+-- Manual cleanup command for troubleshooting
+RegisterCommand('cleanupranchanimals', function()
+    local Player = RSGCore.Functions.GetPlayerData()
+    if not Player or not Player.job then return end
     
-    print('^3[ANIMAL DEBUG]^7 === Animal Debug Report ===')
-    print('^3[ANIMAL DEBUG]^7 Spawned Animals Count: ' .. GetTableLength(spawnedAnimals))
-    print('^3[ANIMAL DEBUG]^7 Cached Animals Count: ' .. #animalDataCache)
+    local playerjob = Player.job.name
+    local isRanchStaff = false
     
-    -- Check for nearby animal entities
-    for i = 1, 256 do -- Check nearby entities
-        local entity = GetClosestPed(playerCoords.x, playerCoords.y, playerCoords.z, i, false, false, 0)
-        if DoesEntityExist(entity) and entity ~= cache.ped then
-            local model = GetEntityModel(entity)
-            local modelName = ''
-            
-            -- Check if it's a known ranch animal model
-            if model == GetHashKey('a_c_bull_01') then
-                modelName = 'a_c_bull_01'
-                totalAnimals = totalAnimals + 1
-            elseif model == GetHashKey('a_c_cow') then
-                modelName = 'a_c_cow' 
-                totalAnimals = totalAnimals + 1
-            end
-            
-            if modelName ~= '' then
-                local distance = #(playerCoords - GetEntityCoords(entity))
-                local isTracked = false
-                
-                -- Check if this entity is tracked in our spawned animals
-                for _, animalData in pairs(spawnedAnimals) do
-                    if animalData.spawnedAnimal == entity then
-                        isTracked = true
-                        break
-                    end
-                end
-                
-                if not isTracked then
-                    orphanedEntities = orphanedEntities + 1
-                    print('^1[ANIMAL DEBUG]^7 Orphaned ' .. modelName .. ' entity found at distance ' .. math.floor(distance * 10) / 10 .. 'm (entity: ' .. entity .. ')')
-                else
-                    print('^2[ANIMAL DEBUG]^7 Tracked ' .. modelName .. ' entity at distance ' .. math.floor(distance * 10) / 10 .. 'm (entity: ' .. entity .. ')')
-                end
-            end
+    for _, ranchData in pairs(Config.RanchLocations) do
+        if playerjob == ranchData.jobaccess then
+            isRanchStaff = true
+            break
         end
     end
     
-    print('^3[ANIMAL DEBUG]^7 Total Animal Entities: ' .. totalAnimals)
-    print('^1[ANIMAL DEBUG]^7 Orphaned Entities: ' .. orphanedEntities)
-    print('^3[ANIMAL DEBUG]^7 === End Debug Report ===')
+    if isRanchStaff then
+        lib.notify({ title = 'Ranch Animals', description = 'Cleaning up orphaned animal entities...', type = 'info' })
+        
+        -- Clear current tracked animals
+        SpawnManager:ClearAll()
+        
+        -- Clean up orphaned entities
+        SpawnManager:CleanupOrphanedEntities()
+        
+        -- Refresh from server
+        TriggerServerEvent('rex-ranch:server:refreshAnimals')
+        
+        lib.notify({ title = 'Ranch Animals', description = 'Cleanup completed!', type = 'success' })
+    else
+        lib.notify({ title = 'Ranch Animals', description = 'You must be ranch staff to use this command!', type = 'error' })
+    end
 end, false)
 
-function GetTableLength(t)
-    local count = 0
-    for _ in pairs(t) do count = count + 1 end
-    return count
-end
+-- Debug command to test production system
+RegisterCommand('testproduction', function(source, args)
+    local Player = RSGCore.Functions.GetPlayerData()
+    if not Player or not Player.job then return end
+    
+    local playerjob = Player.job.name
+    local isRanchStaff = false
+    
+    for _, ranchData in pairs(Config.RanchLocations) do
+        if playerjob == ranchData.jobaccess then
+            isRanchStaff = true
+            break
+        end
+    end
+    
+    if not isRanchStaff then
+        lib.notify({ title = 'Error', description = 'You must be ranch staff to use this command!', type = 'error' })
+        return
+    end
+    
+    local animalid = tonumber(args[1])
+    if not animalid then
+        lib.notify({ title = 'Usage', description = '/testproduction [animalid]', type = 'info' })
+        return
+    end
+    
+    lib.notify({ title = 'Testing', description = 'Testing production for animal ' .. animalid .. '...', type = 'info' })
+    
+    RSGCore.Functions.TriggerCallback('rex-ranch:server:getAnimalProductionStatus', function(productionData)
+        if Config.Debug then
+            print('^3[CLIENT PRODUCTION TEST]^7 Result for animal ' .. animalid .. ':')
+            if productionData then
+                print('^3[CLIENT PRODUCTION TEST]^7 - Product Name: ' .. tostring(productionData.productName))
+                print('^3[CLIENT PRODUCTION TEST]^7 - Product Amount: ' .. tostring(productionData.productAmount))
+                print('^3[CLIENT PRODUCTION TEST]^7 - Has Product: ' .. tostring(productionData.hasProduct))
+                print('^3[CLIENT PRODUCTION TEST]^7 - Can Produce: ' .. tostring(productionData.canProduce))
+                print('^3[CLIENT PRODUCTION TEST]^7 - Time Until Next: ' .. tostring(productionData.timeUntilNext))
+            else
+                print('^1[CLIENT PRODUCTION TEST]^7 - Result is false/nil')
+            end
+        end
+        
+        if not productionData then
+            lib.notify({ title = 'Test Result', description = 'No production data returned for animal ' .. animalid, type = 'error' })
+        else
+            local status = productionData.hasProduct and 'Ready to collect!' or 
+                          productionData.canProduce and 'Can produce' or 'Cannot produce'
+            lib.notify({ 
+                title = 'Test Result', 
+                description = 'Animal ' .. animalid .. ': ' .. productionData.productName .. ' - ' .. status, 
+                type = 'success' 
+            })
+        end
+    end, animalid)
+end, false)
 
 ---------------------------------------------
--- find breeding partner (from animal info menu)
+-- Breeding System Events
 ---------------------------------------------
+
+-- Find breeding partner (from animal info menu)
 RegisterNetEvent('rex-ranch:client:findBreedingPartner', function(data)
     local animalid = data.animalid
     local PlayerData = RSGCore.Functions.GetPlayerData()
@@ -1355,9 +1203,7 @@ RegisterNetEvent('rex-ranch:client:findBreedingPartner', function(data)
     end, ranchid, animalid)
 end)
 
----------------------------------------------
--- confirm breeding (from animal info menu)
----------------------------------------------
+-- Confirm breeding (from animal info menu)
 RegisterNetEvent('rex-ranch:client:confirmBreeding', function(data)
     local animal1id = data.animal1id
     local animal2id = data.animal2id
@@ -1377,18 +1223,176 @@ RegisterNetEvent('rex-ranch:client:confirmBreeding', function(data)
     end
 end)
 
+-- Menu validation debug command
+RegisterCommand('validatemenu', function(source, args)
+    local Player = RSGCore.Functions.GetPlayerData()
+    if not Player or not Player.job then
+        lib.notify({ title = 'Error', description = 'Player data not loaded!', type = 'error' })
+        return
+    end
+    
+    local playerjob = Player.job.name
+    local isRanchStaff = false
+    
+    for _, ranchData in pairs(Config.RanchLocations) do
+        if playerjob == ranchData.jobaccess then
+            isRanchStaff = true
+            break
+        end
+    end
+    
+    if not isRanchStaff then
+        lib.notify({ title = 'Error', description = 'You must be ranch staff to use this command!', type = 'error' })
+        return
+    end
+    
+    local animalid = tonumber(args[1])
+    if not animalid then
+        lib.notify({ title = 'Usage', description = '/validatemenu [animalid] - Validates menu system for specific animal', type = 'info' })
+        return
+    end
+    
+    lib.notify({ title = 'Validating', description = 'Running menu validation for animal ' .. animalid .. '...', type = 'info' })
+    
+    local validationResults = {}
+    
+    -- Check 1: Animal data exists in cache
+    local animalData = getFreshAnimalData(animalid)
+    if animalData then
+        table.insert(validationResults, '✅ Animal data found in cache')
+        
+        -- Check 2: Required fields exist
+        local requiredFields = {'animalid', 'model', 'health', 'hunger', 'thirst', 'age', 'gender'}
+        local missingFields = {}
+        
+        for _, field in ipairs(requiredFields) do
+            if not animalData[field] then
+                table.insert(missingFields, field)
+            end
+        end
+        
+        if #missingFields == 0 then
+            table.insert(validationResults, '✅ All required fields present')
+        else
+            table.insert(validationResults, '❌ Missing fields: ' .. table.concat(missingFields, ', '))
+        end
+        
+        -- Check 3: Model has product config
+        if Config.AnimalProducts[animalData.model] then
+            table.insert(validationResults, '✅ Product config found for model: ' .. animalData.model)
+        else
+            table.insert(validationResults, '⚠️ No product config for model: ' .. animalData.model)
+        end
+        
+    else
+        table.insert(validationResults, '❌ Animal data not found in cache')
+    end
+    
+    -- Check 4: Entity exists in spawn manager
+    local entity = SpawnManager:GetEntityById(animalid)
+    if entity and DoesEntityExist(entity) then
+        table.insert(validationResults, '✅ Entity exists and spawned')
+        
+        -- Check 5: ox_target interaction  
+        local playerCoords = GetEntityCoords(cache.ped)
+        local entityCoords = GetEntityCoords(entity)
+        local distance = #(playerCoords - entityCoords)
+        
+        if distance <= 3.0 then
+            table.insert(validationResults, '✅ Entity within interaction range (' .. math.floor(distance * 10) / 10 .. 'm)')
+        else
+            table.insert(validationResults, '⚠️ Entity outside interaction range (' .. math.floor(distance * 10) / 10 .. 'm > 3m)')
+        end
+        
+    else
+        table.insert(validationResults, '❌ Entity not found or not spawned')
+    end
+    
+    -- Check 6: Required items in inventory
+    local hasFood = RSGCore.Functions.HasItem('animal_feed', 1)
+    local hasWater = RSGCore.Functions.HasItem('water_bucket', 1)
+    
+    if hasFood then
+        table.insert(validationResults, '✅ Has animal_feed for feeding')
+    else
+        table.insert(validationResults, '⚠️ Missing animal_feed (feeding will fail)')
+    end
+    
+    if hasWater then
+        table.insert(validationResults, '✅ Has water_bucket for watering')
+    else
+        table.insert(validationResults, '⚠️ Missing water_bucket (watering will fail)')
+    end
+    
+    -- Display results
+    CreateThread(function()
+        for i, result in ipairs(validationResults) do
+            lib.notify({ 
+                title = 'Validation ' .. i .. '/' .. #validationResults, 
+                description = result,
+                type = string.find(result, '✅') and 'success' or string.find(result, '❌') and 'error' or 'info'
+            })
+            Wait(1500)
+        end
+        
+        local passedChecks = 0
+        for _, result in ipairs(validationResults) do
+            if string.find(result, '✅') then
+                passedChecks = passedChecks + 1
+            end
+        end
+        
+        lib.notify({ 
+            title = 'Validation Complete', 
+            description = 'Passed ' .. passedChecks .. '/' .. #validationResults .. ' checks',
+            type = passedChecks == #validationResults and 'success' or 'info'
+        })
+    end)
+end, false)
+
 ---------------------------------------------
--- cleanup
+-- Cleanup
 ---------------------------------------------
 AddEventHandler('onResourceStop', function(resourceName)
     if GetCurrentResourceName() ~= resourceName then return end
-    for k,v in pairs(spawnedAnimals) do
-        if DoesEntityExist(spawnedAnimals[k].spawnedAnimal) then
-            DeletePed(spawnedAnimals[k].spawnedAnimal)
-        end
-        spawnedAnimals[k] = nil
-    end
-    -- Clear transport states
+    
+    SpawnManager:ClearAll()
     transportingAnimals = {}
     followStates = {}
+end)
+
+-- Cleanup on resource start to remove orphaned entities
+AddEventHandler('onResourceStart', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    
+    -- Wait a bit for other resources to load
+    CreateThread(function()
+        Wait(3000)
+        
+        -- Only cleanup if player is loaded
+        if cache.ped and DoesEntityExist(cache.ped) then
+            if Config.Debug then
+                print('^3[SPAWN MANAGER]^7 Resource restarted - cleaning up orphaned entities')
+            end
+            
+            -- Initialize SpawnManager if not already done
+            if not SpawnManager.entities then
+                SpawnManager.entities = {}
+                SpawnManager.pending = {}
+            end
+            
+            -- Clean up orphaned entities
+            SpawnManager:CleanupOrphanedEntities()
+        end
+    end)
+end)
+
+---------------------------------------------
+-- Initialize on resource start
+---------------------------------------------
+CreateThread(function()
+    Wait(1000)
+    if cache.ped and DoesEntityExist(cache.ped) then
+        SpawnManager:Initialize()
+    end
 end)
