@@ -184,7 +184,7 @@ function SpawnManager:ConfigureAnimalEntity(entity, animalData)
     
     -- Entity properties
     SetEntityAsMissionEntity(entity, true, true)
-    SetEntityInvincible(entity, false)
+    SetEntityInvincible(entity, true)
     FreezeEntityPosition(entity, false)
     SetPedOutfitPreset(entity, 0)
     SetRelationshipBetweenGroups(1, GetPedRelationshipGroupHash(entity), joaat('PLAYER'))
