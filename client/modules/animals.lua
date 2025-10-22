@@ -418,6 +418,12 @@ function isPlayerRanchStaff()
     end
     
     local playerjob = PlayerData.job.name
+    local joblevel = PlayerData.job.grade and PlayerData.job.grade.level or 0
+    
+    -- Only Ranch Hand (level 1) and Ranch Manager (level 2) can target animals
+    if joblevel < 1 then
+        return false
+    end
     
     for _, ranchData in pairs(Config.RanchLocations) do
         if playerjob == ranchData.jobaccess then

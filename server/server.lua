@@ -1408,13 +1408,6 @@ RegisterNetEvent('rex-ranch:server:sellAnimal', function(animalid, salePrice, sa
         description = 'Sold ' .. (animal.model == 'a_c_bull_01' and 'Bull' or 'Cow') .. ' for $' .. salePrice .. '!'
     })
     
-    if Config.ServerNotify then
-        TriggerClientEvent('ox_lib:notify', -1, {
-            type = 'info',
-            description = 'An animal has been sold at the livestock market!'
-        })
-    end
-    
     -- Remove from clients and refresh
     TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animalid)
     TriggerEvent('rex-ranch:server:refreshAnimals')
@@ -1503,13 +1496,6 @@ RegisterNetEvent('rex-ranch:server:sellAllAnimals', function(animals, salePointC
         TriggerClientEvent('ox_lib:notify', src, {
             type = 'error',
             description = 'Failed to sell any animals!'
-        })
-    end
-    
-    if Config.ServerNotify and successCount > 0 then
-        TriggerClientEvent('ox_lib:notify', -1, {
-            type = 'info',
-            description = successCount .. ' animal(s) have been sold at the livestock market!'
         })
     end
     
