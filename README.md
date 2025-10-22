@@ -192,12 +192,12 @@ Configure animal production in `Config.AnimalProducts`:
 #### Player Management
 ```lua
 -- Assign ranch jobs
-/givejob [player_id] [ranch_name] [grade]
+/setjob [player_id] [ranch_name] [grade]
 
 -- Example: Make player ID 1 a manager at Macfarlane Ranch
-/givejob 1 macfarranch 0 -- Trainee Rancher
-/givejob 1 macfarranch 1 -- Ranch Hand
-/givejob 1 macfarranch 2 -- Ranch Manager
+/setjob 1 emeraldranch 0 -- Trainee Rancher
+/setjob 1 emeraldranch 1 -- Ranch Hand
+/setjob 1 emeraldranch 2 -- Ranch Manager
 ```
 
 #### Monitoring & Maintenance
