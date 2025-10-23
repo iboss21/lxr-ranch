@@ -3,7 +3,7 @@ rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aw
 game 'rdr3'
 
 description 'rex-ranch'
-version '0.0.16'
+version '0.0.17'
 
 shared_scripts {
     '@ox_lib/init.lua',

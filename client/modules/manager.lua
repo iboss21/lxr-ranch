@@ -4,9 +4,11 @@ lib.locale()
 RegisterNetEvent('rex-ranch:client:openmanagermenu', function(ranchid)
     local options = {
         {
-            title = 'Ranch Management',
+            title = '👥 Staff Management',
+            description = 'Manage ranch employees',
             icon = 'fa-solid fa-user-tie',
-            event = 'rsg-bossmenu:client:mainmenu',
+            event = 'rex-ranch:client:openStaffManagement',
+            args = ranchid,
             arrow = true
         },
         {

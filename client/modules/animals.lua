@@ -53,6 +53,18 @@ function SpawnManager:CheckSpawnRequests()
         return
     end
     
+    -- Clean up stale pending requests (older than 30 seconds)
+    local currentTime = GetGameTimer()
+    local staleTimeout = 30000
+    for animalId, requestData in pairs(self.pending) do
+        if (currentTime - requestData.timestamp) > staleTimeout then
+            if Config.Debug then
+                print('^3[SPAWN MANAGER]^7 Cleaning up stale pending request for animal ' .. animalId)
+            end
+            self.pending[animalId] = nil
+        end
+    end
+    
     local playerCoords = GetEntityCoords(cache.ped)
     local pendingCount = self:GetPendingCount()
     
@@ -92,7 +104,27 @@ end
 
 -- Request to spawn an animal
 function SpawnManager:RequestSpawn(animalId, animalData)
-    if self.pending[animalId] then return end
+    -- Don't request if already spawned
+    if self.entities[animalId] then
+        local existingEntity = self.entities[animalId].entity
+        if DoesEntityExist(existingEntity) then
+            if Config.Debug then
+                print('^3[SPAWN MANAGER]^7 Animal ' .. animalId .. ' already spawned, skipping request')
+            end
+            return
+        else
+            -- Clean up stale reference
+            self.entities[animalId] = nil
+        end
+    end
+    
+    -- Don't request if already pending
+    if self.pending[animalId] then
+        if Config.Debug then
+            print('^3[SPAWN MANAGER]^7 Spawn already pending for animal ' .. animalId)
+        end
+        return
+    end
     
     self.pending[animalId] = {
         data = animalData,
@@ -108,11 +140,30 @@ end
 
 -- Spawn an animal entity
 function SpawnManager:SpawnAnimal(animalId, animalData)
+    -- Check if animal already exists
+    if self.entities[animalId] then
+        local existingEntity = self.entities[animalId].entity
+        if DoesEntityExist(existingEntity) then
+            if Config.Debug then
+                print('^3[SPAWN MANAGER]^7 Animal ' .. animalId .. ' already exists (entity: ' .. existingEntity .. '), skipping spawn')
+            end
+            self.pending[animalId] = nil
+            return true
+        else
+            -- Entity was deleted but not cleaned up, remove it
+            if Config.Debug then
+                print('^3[SPAWN MANAGER]^7 Cleaning up stale entity reference for animal ' .. animalId)
+            end
+            self.entities[animalId] = nil
+        end
+    end
+    
     local entity = self:CreateAnimalEntity(animalData)
     if not entity then
         if Config.Debug then
             print('^1[SPAWN MANAGER]^7 Failed to create entity for animal ' .. animalId)
         end
+        self.pending[animalId] = nil
         return false
     end
     
@@ -120,8 +171,8 @@ function SpawnManager:SpawnAnimal(animalId, animalData)
     self.entities[animalId] = {
         entity = entity,
         data = animalData,
-        spawnTime = GetGameTimer(),
-        networkId = NetworkGetNetworkIdFromEntity(entity)
+        spawnTime = GetGameTimer()
+        -- No networkId - animals are client-side only
     }
     
     -- Clean up pending request
@@ -172,9 +223,9 @@ end
 
 -- Configure animal entity properties
 function SpawnManager:ConfigureAnimalEntity(entity, animalData)
-    -- Network registration
-    NetworkRegisterEntityAsNetworked(entity)
-    SetNetworkIdExistsOnAllMachines(NetworkGetNetworkIdFromEntity(entity), true)
+    -- DON'T network register - keep animals client-side only
+    -- This prevents automatic syncing that causes duplicates
+    -- Each player manages their own local animal entities
     
     -- Scale handling
     local scale = tonumber(animalData.scale) or 1.0
@@ -183,11 +234,13 @@ function SpawnManager:ConfigureAnimalEntity(entity, animalData)
     SetPedScale(entity, scale)
     
     -- Entity properties
+    -- SetEntityAsMissionEntity keeps it from being auto-deleted
     SetEntityAsMissionEntity(entity, true, true)
     SetEntityInvincible(entity, true)
     FreezeEntityPosition(entity, false)
     SetPedOutfitPreset(entity, 0)
     SetRelationshipBetweenGroups(1, GetPedRelationshipGroupHash(entity), joaat('PLAYER'))
+    SetBlockingOfNonTemporaryEvents(entity, true)
     
     -- Fade in effect
     if Config.AnimalFadeIn then
@@ -248,6 +301,9 @@ function SpawnManager:DespawnAnimal(animalId)
             DeletePed(entity)
         end
     end
+    
+    -- Report despawn to server so it can clear tracking
+    TriggerServerEvent('rex-ranch:server:reportDespawn', animalId)
     
     -- Clean up data
     self.entities[animalId] = nil
@@ -418,13 +474,9 @@ function isPlayerRanchStaff()
     end
     
     local playerjob = PlayerData.job.name
-    local joblevel = PlayerData.job.grade and PlayerData.job.grade.level or 0
     
-    -- Only Ranch Hand (level 1) and Ranch Manager (level 2) can target animals
-    if joblevel < 1 then
-        return false
-    end
-    
+    -- All ranch staff levels (0-2) can target animals
+    -- Level 0: Trainee Rancher, Level 1: Ranch Hand, Level 2: Ranch Manager
     for _, ranchData in pairs(Config.RanchLocations) do
         if playerjob == ranchData.jobaccess then
             return true

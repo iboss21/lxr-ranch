@@ -203,6 +203,60 @@ Config.AnimalProducts = {
 }
 
 ---------------------------------
+-- staff management settings
+---------------------------------
+Config.StaffManagement = {
+    MinGradeToManage = 2, -- Minimum grade required to manage staff
+    MaxEmployeesPerRanch = 20, -- Maximum number of employees per ranch
+    EnableSalarySystem = true, -- Enable/disable salary payments
+    SalaryInterval = 3600, -- Salary payment interval in seconds (1 hour)
+    DefaultSalaries = {
+        [0] = 50,  -- Trainee
+        [1] = 100, -- Ranch Hand
+        [2] = 150, -- Manager
+        [3] = 200, -- Boss
+    },
+    Permissions = {
+        [0] = { -- Trainee
+            canFeedAnimals = true,
+            canWaterAnimals = true,
+            canCollectProducts = false,
+            canBreed = false,
+            canSell = false,
+            canBuy = false,
+            canManageStaff = false,
+        },
+        [1] = { -- Ranch Hand
+            canFeedAnimals = true,
+            canWaterAnimals = true,
+            canCollectProducts = true,
+            canBreed = true,
+            canSell = false,
+            canBuy = false,
+            canManageStaff = false,
+        },
+        [2] = { -- Manager
+            canFeedAnimals = true,
+            canWaterAnimals = true,
+            canCollectProducts = true,
+            canBreed = true,
+            canSell = true,
+            canBuy = true,
+            canManageStaff = true,
+        },
+        [3] = { -- Boss
+            canFeedAnimals = true,
+            canWaterAnimals = true,
+            canCollectProducts = true,
+            canBreed = true,
+            canSell = true,
+            canBuy = true,
+            canManageStaff = true,
+        },
+    }
+}
+
+---------------------------------
 -- ranch locations
 ---------------------------------
 Config.RanchLocations = {

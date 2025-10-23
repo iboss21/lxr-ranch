@@ -121,6 +121,7 @@ end)
 RegisterNetEvent('rex-ranch:client:openSaleMenu', function(salePointData)
     local PlayerData = RSGCore.Functions.GetPlayerData()
     local playerjob = PlayerData.job.name
+    local joblevel = PlayerData.job.grade and PlayerData.job.grade.level or 0
     
     -- Check if player works at a ranch
     local isRancher = false
@@ -133,6 +134,12 @@ RegisterNetEvent('rex-ranch:client:openSaleMenu', function(salePointData)
     
     if not isRancher then
         lib.notify({ title = 'Access Denied', description = 'You must be a rancher to sell animals!', type = 'error' })
+        return
+    end
+    
+    -- Trainee Ranchers (level 0) cannot sell animals
+    if joblevel < 1 then
+        lib.notify({ title = 'Insufficient Rank', description = 'Only Ranch Hands and Managers can sell animals!', type = 'error' })
         return
     end
     
