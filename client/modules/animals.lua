@@ -530,10 +530,39 @@ end)
 
 -- Receive animal data from server
 RegisterNetEvent('rex-ranch:client:spawnAnimals', function(animalData)
-    animalDataCache = animalData
-    
-    if Config.Debug then
-        print('^2[SPAWN MANAGER]^7 Received ' .. #animalData .. ' animals from server')
+    -- Check if this is a single animal or a full refresh
+    -- Single animals are sent as 1-item arrays after purchase
+    if #animalData == 1 then
+        -- Single animal - merge with existing cache
+        local newAnimal = animalData[1]
+        local animalExists = false
+        
+        -- Check if animal already exists in cache
+        for i, cachedAnimal in ipairs(animalDataCache) do
+            if cachedAnimal.animalid == newAnimal.animalid then
+                animalDataCache[i] = newAnimal
+                animalExists = true
+                if Config.Debug then
+                    print('^3[SPAWN MANAGER]^7 Updated existing animal ' .. newAnimal.animalid .. ' in cache')
+                end
+                break
+            end
+        end
+        
+        -- If it doesn't exist, add it to the cache
+        if not animalExists then
+            table.insert(animalDataCache, newAnimal)
+            if Config.Debug then
+                print('^2[SPAWN MANAGER]^7 Added new animal ' .. newAnimal.animalid .. ' to cache')
+            end
+        end
+    else
+        -- Full animal list - replace cache
+        animalDataCache = animalData
+        
+        if Config.Debug then
+            print('^2[SPAWN MANAGER]^7 Received ' .. #animalData .. ' animals from server (full refresh)')
+        end
     end
 end)
 

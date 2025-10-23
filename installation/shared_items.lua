@@ -3,6 +3,7 @@
     -----------------------------------------------
     animal_feed  = { name = 'animal_feed',  label = 'Animal Feed',  weight = 1000, type = 'item', image = 'animal_feed.png',  unique = false, useable = true, shouldClose = true, description = 'feed for your animals' },
     water_bucket = { name = 'water_bucket', label = 'Water Bucket', weight = 1000, type = 'item', image = 'water_bucket.png', unique = false, useable = true, shouldClose = true, description = 'water for your animals' },
+    empty_water_bucket = { name = 'empty_water_bucket', label = 'Empty Water Bucket', weight = 1000, type = 'item', image = 'water_bucket.png', unique = false, useable = false, shouldClose = true, description = 'an empty water bucket - refill at a water source' },
     -----------------------------------------------
     -- ANIMAL PRODUCTS
     -----------------------------------------------

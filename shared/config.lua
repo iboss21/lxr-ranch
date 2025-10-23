@@ -43,6 +43,9 @@ Config.HealthDecayRate = 1 -- health reduction per cronjob run when starving/deh
 Config.MinSurvivalStats = 0 -- minimum hunger/thirst before health starts decaying
 Config.FeedItem = 'animal_feed' -- item required to feed animals
 Config.WaterItem = 'water_bucket' -- item required to water animals
+Config.WaterBucketUses = 5 -- number of times water bucket can be used before becoming empty
+Config.EmptyWaterBucket = 'empty_water_bucket' -- empty bucket item name
+Config.WaterRefillCost = 0 -- cost to refill bucket (set to 0 for free)
 
 ---------------------------------
 -- herding system settings
@@ -364,6 +367,61 @@ Config.SalePointLocations = {
         blipscale = 0.2,
         showblip = true
     },
+}
+
+---------------------------------
+-- water source locations
+---------------------------------
+Config.WaterSourceLocations = {
+    -- Wells at each ranch
+    { 
+        name = 'Macfarlane Water Refill',
+        coords = vector3(-2412.50, -2395.00, 61.50),
+        blipname = 'Water Well',
+        blipsprite = 'blip_shop_water',
+        showblip = false,
+        promptText = 'Fill Water Bucket'
+    },
+    { 
+        name = 'Emerald Water Refill',
+        coords = vector3(1389.44, 280.41, 88.82),
+        blipname = 'Water Well',
+        blipsprite = 'blip_shop_water',
+        showblip = false,
+        promptText = 'Fill Water Bucket'
+    },
+    { 
+        name = 'Pronghorn Water Refill',
+        coords = vector3(-2555.00, 410.00, 148.50),
+        blipname = 'Water Well',
+        blipsprite = 'blip_shop_water',
+        showblip = false,
+        promptText = 'Fill Water Bucket'
+    },
+    { 
+        name = 'Downes Water Refill',
+        coords = vector3(-847.00, 343.00, 96.00),
+        blipname = 'Water Well',
+        blipsprite = 'blip_shop_water',
+        showblip = false,
+        promptText = 'Fill Water Bucket'
+    },
+    { 
+        name = 'Hill Haven Water Refill',
+        coords = vector3(1375.00, -852.00, 70.50),
+        blipname = 'Water Well',
+        blipsprite = 'blip_shop_water',
+        showblip = false,
+        promptText = 'Fill Water Bucket'
+    },
+    { 
+        name = 'Hanging Dog Water Refill',
+        coords = vector3(-2215.00, 730.00, 122.50),
+        blipname = 'Water Well',
+        blipsprite = 'blip_shop_water',
+        showblip = false,
+        promptText = 'Fill Water Bucket'
+    }
 }
 
 ---------------------------------

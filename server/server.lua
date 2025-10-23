@@ -692,10 +692,47 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
     end)
     
     if updateSuccess and updateError and updateError > 0 then
-        Player.Functions.RemoveItem(Config.WaterItem, 1)
-        if RSGCore.Shared.Items[Config.WaterItem] then
-            TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[Config.WaterItem], 'remove', 1)
+        -- Handle water bucket durability/uses
+        local waterBucket = Player.Functions.GetItemByName(Config.WaterItem)
+        if waterBucket then
+            local maxUses = Config.WaterBucketUses or 5
+            local currentUses = waterBucket.info and waterBucket.info.uses or 0
+            local remainingUses = maxUses - currentUses - 1
+            
+            if remainingUses <= 0 then
+                -- Remove full bucket and give empty bucket
+                Player.Functions.RemoveItem(Config.WaterItem, 1, waterBucket.slot)
+                
+                -- Add empty bucket if configured
+                if Config.EmptyWaterBucket then
+                    local emptyInfo = {
+                        description = 'An empty water bucket. Refill at a water source.'
+                    }
+                    Player.Functions.AddItem(Config.EmptyWaterBucket, 1, false, emptyInfo)
+                    if RSGCore.Shared.Items[Config.EmptyWaterBucket] then
+                        TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[Config.EmptyWaterBucket], 'add', 1)
+                    end
+                end
+                
+                TriggerClientEvent('ox_lib:notify', src, {type = 'info', description = 'Your water bucket is now empty! Refill it at a water source.'})
+            else
+                -- Remove old bucket and add new one with updated uses
+                Player.Functions.RemoveItem(Config.WaterItem, 1, waterBucket.slot)
+                
+                local updatedInfo = {
+                    uses = currentUses + 1,
+                    description = 'Water for your animals. Uses left: ' .. remainingUses
+                }
+                Player.Functions.AddItem(Config.WaterItem, 1, false, updatedInfo)
+                
+                TriggerClientEvent('ox_lib:notify', src, {type = 'info', description = 'Water bucket uses left: ' .. remainingUses})
+            end
+            
+            if RSGCore.Shared.Items[Config.WaterItem] then
+                TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[Config.WaterItem], 'remove', 1)
+            end
         end
+        
         TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Animal has been watered!'})
         
         -- Send immediate update to client (no need for full refresh)
@@ -709,6 +746,58 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
             print('^1[ERROR]^7 Failed to update thirst for animal ' .. animalid .. ' - Success: ' .. tostring(updateSuccess) .. ', Rows affected: ' .. tostring(updateError))
         end
         TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to water animal! Please try again.'})
+    end
+end)
+
+---------------------------------------------
+-- fill water bucket system
+---------------------------------------------
+RegisterNetEvent('rex-ranch:server:fillWaterBucket', function()
+    local src = source
+    local Player = RSGCore.Functions.GetPlayer(src)
+    
+    if not Player then return end
+    
+    -- Check if player has empty bucket or partially used bucket
+    local hasEmptyBucket = Player.Functions.GetItemByName(Config.EmptyWaterBucket)
+    local hasPartialBucket = Player.Functions.GetItemByName(Config.WaterItem)
+    
+    if not hasEmptyBucket and not hasPartialBucket then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You need a water bucket to fill!'})
+        return
+    end
+    
+    -- Check if player has money if refill costs
+    if Config.WaterRefillCost > 0 then
+        if Player.PlayerData.money.cash < Config.WaterRefillCost then
+            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You need $' .. Config.WaterRefillCost .. ' to refill!'})
+            return
+        end
+        Player.Functions.RemoveMoney('cash', Config.WaterRefillCost)
+    end
+    
+    -- Remove old bucket (empty or partial)
+    if hasEmptyBucket then
+        Player.Functions.RemoveItem(Config.EmptyWaterBucket, 1, hasEmptyBucket.slot)
+    elseif hasPartialBucket then
+        Player.Functions.RemoveItem(Config.WaterItem, 1, hasPartialBucket.slot)
+    end
+    
+    -- Give new full bucket with fresh metadata
+    local info = {
+        uses = 0,
+        description = 'Water for your animals. Uses left: ' .. (Config.WaterBucketUses or 5)
+    }
+    Player.Functions.AddItem(Config.WaterItem, 1, false, info)
+    
+    if RSGCore.Shared.Items[Config.WaterItem] then
+        TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[Config.WaterItem], 'add', 1)
+    end
+    
+    TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Water bucket filled!'})
+    
+    if Config.Debug then
+        print('^2[DEBUG]^7 Player ' .. src .. ' filled water bucket')
     end
 end)
 
@@ -1764,13 +1853,28 @@ RegisterNetEvent('rex-ranch:server:buyAnimal', function(purchaseData)
     })
     
     if Config.ServerNotify then
-        TriggerClientEvent('ox_lib:notify', -1, {
+        TriggerClientEvent('ox_lib:notify', src, {
             type = 'info',
             description = 'A new animal has been purchased at ' .. (purchaseData.buyPointName or 'the livestock dealer') .. '!'
         })
     end
     
-    -- Refresh animals for all clients
+    -- Refresh animals for the purchasing player first to trigger immediate spawn
+    -- Query the newly created animal
+    MySQL.query('SELECT * FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(newAnimalData)
+        if newAnimalData and #newAnimalData > 0 then
+            -- Send the new animal data to the purchasing player
+            local animalDataArray = {newAnimalData[1]}
+            TriggerClientEvent('rex-ranch:client:spawnAnimals', src, animalDataArray)
+            
+            if Config.Debug then
+                print('^2[BUY ANIMAL SUCCESS]^7 Sent new animal ' .. animalid .. ' to player ' .. src .. ' for immediate spawn')
+            end
+        end
+    end)
+    
+    -- Also refresh all clients to update their animal lists
+    Wait(500)  -- Small delay to ensure the purchasing player processes first
     TriggerEvent('rex-ranch:server:refreshAnimals')
     
     if Config.Debug then
