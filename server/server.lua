@@ -22,7 +22,7 @@ local function isPlayerRanchStaff(Player)
 end
 
 ---------------------------------------------
--- New Spawn Management System
+-- Spawn Management System
 ---------------------------------------------
 local SpawnController = {
     activeSpawns = {},      -- [animalId] = {playerId, spawnTime}
@@ -34,7 +34,9 @@ local SpawnController = {
     }
 }
 
+---------------------------------------------
 -- Initialize spawn controller
+---------------------------------------------
 function SpawnController:Initialize()
     -- Start cleanup thread
     CreateThread(function()
@@ -49,7 +51,9 @@ function SpawnController:Initialize()
     end
 end
 
+---------------------------------------------
 -- Check if a player can spawn an animal
+---------------------------------------------
 function SpawnController:CanPlayerSpawn(playerId, animalId)
     -- Check if animal is already spawned
     if self.activeSpawns[animalId] then
@@ -138,7 +142,9 @@ function SpawnController:CanPlayerSpawn(playerId, animalId)
     return true, "OK"
 end
 
+---------------------------------------------
 -- Register an animal spawn
+---------------------------------------------
 function SpawnController:RegisterSpawn(playerId, animalId, animalData)
     if not self.activeSpawns[animalId] then
         self.activeSpawns[animalId] = {
@@ -162,7 +168,9 @@ function SpawnController:RegisterSpawn(playerId, animalId, animalData)
     end
 end
 
+---------------------------------------------
 -- Unregister an animal spawn
+---------------------------------------------
 function SpawnController:UnregisterSpawn(animalId)
     if self.activeSpawns[animalId] then
         if Config.Debug then
@@ -183,7 +191,9 @@ function SpawnController:GetPlayerSpawnCount(playerId)
     return count
 end
 
+---------------------------------------------
 -- Cleanup stale data
+---------------------------------------------
 function SpawnController:CleanupStaleData()
     local currentTime = os.time()
     local cleanedCount = 0
@@ -239,7 +249,9 @@ function SpawnController:CleanupStaleData()
     end
 end
 
+---------------------------------------------
 -- Clear all spawns for a player
+---------------------------------------------
 function SpawnController:ClearPlayerSpawns(playerId)
     local clearedCount = 0
     for animalId, spawnData in pairs(self.activeSpawns) do
@@ -266,7 +278,9 @@ function SpawnController:ClearPlayerSpawns(playerId)
     end
 end
 
+---------------------------------------------
 -- Initialize the spawn controller
+---------------------------------------------
 SpawnController:Initialize()
 
 ---------------------------------------------
@@ -388,7 +402,7 @@ local function CreateAnimalId()
 end
 
 ---------------------------------------------
--- New Spawn Event Handlers
+-- Spawn Event Handlers
 ---------------------------------------------
 
 -- Handle spawn requests from clients
@@ -1011,51 +1025,6 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalProductionStatus', f
 end)
 
 ---------------------------------------------
--- Debug/Admin Commands
----------------------------------------------
--- Set animal product ready status (for testing)
-RegisterCommand('setproductready', function(source, args)
-    local src = source
-    local Player = RSGCore.Functions.GetPlayer(src)
-    
-    if not Player or not isPlayerRanchStaff(Player) then
-        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You must be ranch staff to use this command!'})
-        return
-    end
-    
-    local animalid = tonumber(args[1])
-    local status = tonumber(args[2]) or 1  -- Default to 1 (ready)
-    
-    if not animalid then
-        TriggerClientEvent('ox_lib:notify', src, {type = 'info', description = 'Usage: /setproductready [animalid] [status] (status: 0=not ready, 1=ready)'})
-        return
-    end
-    
-    -- Validate status
-    if status ~= 0 and status ~= 1 then
-        status = 1
-    end
-    
-    MySQL.update('UPDATE rex_ranch_animals SET product_ready = ? WHERE animalid = ?', {status, animalid}, function(affectedRows)
-        if affectedRows and affectedRows > 0 then
-            TriggerClientEvent('ox_lib:notify', src, {
-                type = 'success', 
-                description = 'Set animal ' .. animalid .. ' product status to ' .. (status == 1 and 'ready' or 'not ready')
-            })
-            
-            -- Refresh animals for all clients
-            TriggerEvent('rex-ranch:server:refreshAnimals')
-            
-            if Config.Debug then
-                print('^2[ADMIN COMMAND]^7 Player ' .. src .. ' set animal ' .. animalid .. ' product_ready to ' .. status)
-            end
-        else
-            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Animal ' .. animalid .. ' not found!'})
-        end
-    end)
-end, false)
-
----------------------------------------------
 -- Animal Overview Callback
 ---------------------------------------------
 RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalOverview', function(src, cb, ranchid)
@@ -1090,7 +1059,9 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalOverview', function(
     end
 end)
 
+---------------------------------------------
 -- Helper function to process animal overview data
+---------------------------------------------
 function processAnimalOverviewData(animals)
     local overview = {
         animals = {},
@@ -1308,7 +1279,9 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getBreedingStatus', function(
     end)
 end)
 
+---------------------------------------------
 -- Get pregnancy progress
+---------------------------------------------
 RSGCore.Functions.CreateCallback('rex-ranch:server:getPregnancyProgress', function(src, cb, animalid)
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player or not animalid or not isPlayerRanchStaff(Player) then 
@@ -1377,7 +1350,9 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getPregnancyProgress', functi
     end)
 end)
 
+---------------------------------------------
 -- Get available animals for breeding
+---------------------------------------------
 RSGCore.Functions.CreateCallback('rex-ranch:server:getAvailableAnimalsForBreeding', function(src, cb, ranchid, animalid)
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player or not ranchid or not animalid or not isPlayerRanchStaff(Player) then 
@@ -2028,7 +2003,9 @@ local function StartBreeding(animal1id, animal2id, isAutomatic)
     end)
 end
 
+---------------------------------------------
 -- Start breeding process (manual trigger from players)
+---------------------------------------------
 RegisterNetEvent('rex-ranch:server:startBreeding', function(animal1id, animal2id)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
@@ -2177,7 +2154,9 @@ CreateThread(function()
     end
 end)
 
+---------------------------------------------
 -- Helper function to process breeding pairs
+---------------------------------------------
 function ProcessBreedingPairs(males, females, maxDistance, ranchid)
     for _, male in ipairs(males) do
         for _, female in ipairs(females) do
@@ -2795,8 +2774,8 @@ end
 ---------------------------------------------
 
 -- Get staff list for a ranch
-RSGCore.Functions.CreateCallback('rex-ranch:server:getStaffList', function(src, cb, ranchid)
-    local Player = RSGCore.Functions.GetPlayer(src)
+RSGCore.Functions.CreateCallback('rex-ranch:server:getStaffList', function(source, cb, ranchid)
+    local Player = RSGCore.Functions.GetPlayer(source)
     if not Player or not ranchid then 
         cb({employees = {}})
         return 
@@ -2820,7 +2799,6 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getStaffList', function(src, 
                 name = targetPlayer.PlayerData.charinfo.firstname .. ' ' .. targetPlayer.PlayerData.charinfo.lastname,
                 grade = targetPlayer.PlayerData.job.grade.level,
                 grade_label = targetPlayer.PlayerData.job.grade.name,
-                salary = targetPlayer.PlayerData.job.payment or 0,
                 is_online = true
             })
         end
@@ -2847,7 +2825,6 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getStaffList', function(src, 
                         name = charinfo.firstname .. ' ' .. charinfo.lastname,
                         grade = job.grade.level,
                         grade_label = job.grade.name,
-                        salary = job.payment or 0,
                         is_online = false
                     })
                 end
@@ -2893,11 +2870,12 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getNearbyPlayers', function(s
 end)
 
 -- Hire employee
-RegisterNetEvent('rex-ranch:server:hireEmployee', function(ranchid, targetId, grade, salary)
+RegisterNetEvent('rex-ranch:server:hireEmployee', function(ranchid, targetId, grade)
+
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     local Target = RSGCore.Functions.GetPlayer(targetId)
-    
+
     if not Player or not Target then return end
     
     -- Check permissions
@@ -2905,28 +2883,33 @@ RegisterNetEvent('rex-ranch:server:hireEmployee', function(ranchid, targetId, gr
         TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You do not have permission to hire staff!'})
         return
     end
-    
-    -- Check employee limit
-    RSGCore.Functions.TriggerCallback('rex-ranch:server:getStaffList', function(staffData)
-        if #staffData.employees >= Config.StaffManagement.MaxEmployeesPerRanch then
-            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Ranch has reached maximum employee limit!'})
-            return
-        end
-        
-        -- Set the player's job
-        Target.Functions.SetJob(ranchid, grade)
-        Target.Functions.SetJobDuty(true)
-        
-        -- Set salary
-        MySQL.update('UPDATE players SET job = JSON_SET(job, "$.payment", ?) WHERE citizenid = ?', {salary, Target.PlayerData.citizenid})
-        
-        TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Employee hired successfully!'})
-        TriggerClientEvent('ox_lib:notify', targetId, {type = 'success', description = 'You have been hired at ' .. ranchid .. '!'})
-        
+
+    -- Check if target player is already employed at this ranch
+    if Target.PlayerData.job.name == ranchid then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'This player is already employed at your ranch!'})
         if Config.Debug then
-            print('^2[STAFF MANAGEMENT]^7 ' .. Player.PlayerData.charinfo.firstname .. ' hired ' .. Target.PlayerData.charinfo.firstname .. ' at ' .. ranchid)
+            print('^3[STAFF MANAGEMENT]^7 Attempted to hire ' .. Target.PlayerData.charinfo.firstname .. ' who is already employed at ' .. ranchid)
         end
-    end, ranchid)
+        return
+    end
+
+	-- check if the player can take the job
+	local canTake = exports['rsg-multijob']:CanTakeNewJob(Target.PlayerData.citizenid)
+	if not canTake then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Unable to hire as player has too many jobs!'})
+        return
+	end
+	
+	local staffCount = exports['rex-ranch']:getStaffCount(ranchid)
+	if staffCount >= Config.StaffManagement.MaxEmployeesPerRanch then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You have the maximum staff hired!'})
+        return
+	end
+
+	Target.Functions.SetJob(ranchid, grade)
+    TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Job added successfully'})
+    TriggerClientEvent('ox_lib:notify', targetId, {type = 'success', description = 'You have been hired at ' .. ranchid .. '!'})
+
 end)
 
 -- Fire employee
@@ -2942,15 +2925,40 @@ RegisterNetEvent('rex-ranch:server:fireEmployee', function(ranchid, targetCitize
         return
     end
     
+    -- Prevent manager from firing themselves
+    if Player.PlayerData.citizenid == targetCitizenid then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You cannot fire yourself!'})
+        return
+    end
+    
     -- Get target player
     local Target = RSGCore.Functions.GetPlayerByCitizenId(targetCitizenid)
     
     if Target then
+        -- Verify the target is actually employed at this ranch
+        if Target.PlayerData.job.name ~= ranchid then
+            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'This player is not employed at your ranch!'})
+            return
+        end
+        
         -- Player is online
         Target.Functions.SetJob('unemployed', 0)
         TriggerClientEvent('ox_lib:notify', Target.PlayerData.source, {type = 'error', description = 'You have been fired from ' .. ranchid .. '!'})
     else
-        -- Player is offline, update database
+        -- Player is offline, verify they work at this ranch first
+        local checkResult = MySQL.query.await('SELECT job FROM players WHERE citizenid = ?', {targetCitizenid})
+        if checkResult and #checkResult > 0 then
+            local jobData = json.decode(checkResult[1].job)
+            if jobData.name ~= ranchid then
+                TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'This player is not employed at your ranch!'})
+                return
+            end
+        else
+            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Employee not found!'})
+            return
+        end
+        
+        -- Update database
         MySQL.update('UPDATE players SET job = JSON_SET(JSON_SET(job, "$.name", "unemployed"), "$.grade", JSON_OBJECT("level", 0, "name", "Unemployed")) WHERE citizenid = ?', {targetCitizenid})
     end
     
@@ -2977,8 +2985,20 @@ RegisterNetEvent('rex-ranch:server:promoteEmployee', function(ranchid, targetCit
     local Target = RSGCore.Functions.GetPlayerByCitizenId(targetCitizenid)
     
     if Target then
+        -- Verify the target is actually employed at this ranch
+        if Target.PlayerData.job.name ~= ranchid then
+            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'This player is not employed at your ranch!'})
+            return
+        end
+        
         local currentGrade = Target.PlayerData.job.grade.level
         local maxGrade = 3 -- Boss level
+        
+        -- Prevent promoting to same or higher grade than manager
+        if currentGrade + 1 >= Player.PlayerData.job.grade.level and Player.PlayerData.job.grade.level < maxGrade then
+            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You cannot promote an employee to your rank or higher!'})
+            return
+        end
         
         if currentGrade >= maxGrade then
             TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Employee is already at maximum rank!'})
@@ -3010,10 +3030,28 @@ RegisterNetEvent('rex-ranch:server:demoteEmployee', function(ranchid, targetCiti
         return
     end
     
+    -- Prevent manager from demoting themselves
+    if Player.PlayerData.citizenid == targetCitizenid then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You cannot demote yourself!'})
+        return
+    end
+    
     local Target = RSGCore.Functions.GetPlayerByCitizenId(targetCitizenid)
     
     if Target then
+        -- Verify the target is actually employed at this ranch
+        if Target.PlayerData.job.name ~= ranchid then
+            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'This player is not employed at your ranch!'})
+            return
+        end
+        
         local currentGrade = Target.PlayerData.job.grade.level
+        
+        -- Prevent demoting someone at same or higher rank (unless you're boss)
+        if currentGrade >= Player.PlayerData.job.grade.level and Player.PlayerData.job.grade.level < 3 then
+            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You cannot demote someone at your rank or higher!'})
+            return
+        end
         
         if currentGrade <= 0 then
             TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Employee is already at minimum rank!'})
@@ -3032,65 +3070,3 @@ RegisterNetEvent('rex-ranch:server:demoteEmployee', function(ranchid, targetCiti
     end
 end)
 
--- Set employee salary
-RegisterNetEvent('rex-ranch:server:setSalary', function(ranchid, targetCitizenid, salary)
-    local src = source
-    local Player = RSGCore.Functions.GetPlayer(src)
-    
-    if not Player then return end
-    
-    -- Check permissions
-    if Player.PlayerData.job.name ~= ranchid or Player.PlayerData.job.grade.level < Config.StaffManagement.MinGradeToManage then
-        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You do not have permission to set salaries!'})
-        return
-    end
-    
-    -- Update salary in database
-    MySQL.update('UPDATE players SET job = JSON_SET(job, "$.payment", ?) WHERE citizenid = ?', {salary, targetCitizenid}, function(affectedRows)
-        if affectedRows > 0 then
-            TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Salary updated to $' .. salary .. '!'})
-            
-            -- Notify employee if online
-            local Target = RSGCore.Functions.GetPlayerByCitizenId(targetCitizenid)
-            if Target then
-                TriggerClientEvent('ox_lib:notify', Target.PlayerData.source, {type = 'info', description = 'Your salary has been updated to $' .. salary .. '!'})
-            end
-            
-            if Config.Debug then
-                print('^2[STAFF MANAGEMENT]^7 ' .. Player.PlayerData.charinfo.firstname .. ' set salary to $' .. salary .. ' for employee ' .. targetCitizenid)
-            end
-        else
-            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to update salary!'})
-        end
-    end)
-end)
-
--- Salary payment system (if enabled)
-if Config.StaffManagement.EnableSalarySystem then
-    CreateThread(function()
-        Wait(60000) -- Wait 1 minute before starting
-        
-        while true do
-            Wait(Config.StaffManagement.SalaryInterval * 1000)
-            
-            -- Pay all online employees
-            for _, playerId in ipairs(RSGCore.Functions.GetPlayers()) do
-                local Player = RSGCore.Functions.GetPlayer(playerId)
-                if Player and Player.PlayerData.job and Player.PlayerData.job.onduty then
-                    local salary = Player.PlayerData.job.payment or 0
-                    if salary > 0 then
-                        Player.Functions.AddMoney('cash', salary)
-                        TriggerClientEvent('ox_lib:notify', playerId, {
-                            type = 'success',
-                            description = 'Received salary: $' .. salary
-                        })
-                        
-                        if Config.Debug then
-                            print('^2[SALARY]^7 Paid $' .. salary .. ' to ' .. Player.PlayerData.charinfo.firstname .. ' ' .. Player.PlayerData.charinfo.lastname)
-                        end
-                    end
-                end
-            end
-        end
-    end)
-end

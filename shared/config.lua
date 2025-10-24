@@ -211,14 +211,7 @@ Config.AnimalProducts = {
 Config.StaffManagement = {
     MinGradeToManage = 2, -- Minimum grade required to manage staff
     MaxEmployeesPerRanch = 20, -- Maximum number of employees per ranch
-    EnableSalarySystem = true, -- Enable/disable salary payments
-    SalaryInterval = 3600, -- Salary payment interval in seconds (1 hour)
-    DefaultSalaries = {
-        [0] = 50,  -- Trainee
-        [1] = 100, -- Ranch Hand
-        [2] = 150, -- Manager
-        [3] = 200, -- Boss
-    },
+    EnableSalarySystem = false, -- Enable/disable salary payments
     Permissions = {
         [0] = { -- Trainee
             canFeedAnimals = true,

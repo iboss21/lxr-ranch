@@ -32,14 +32,6 @@ RegisterNetEvent('rex-ranch:client:openStaffManagement', function(ranchid)
                     OpenHireMenu(ranchid)
                 end
             },
-            {
-                title = '💰 Manage Salaries',
-                description = 'View and adjust employee salaries',
-                icon = 'fa-solid fa-dollar-sign',
-                onSelect = function()
-                    OpenSalaryManagementMenu(ranchid, staffData)
-                end
-            },
         }
         
         lib.registerContext({
@@ -67,12 +59,11 @@ function OpenStaffListMenu(ranchid, staffData)
     else
         for _, employee in ipairs(staffData.employees) do
             local gradeLabel = employee.grade_label or 'Unknown'
-            local salary = employee.salary or 0
             local onlineStatus = employee.is_online and '🟢 Online' or '⚫ Offline'
             
             table.insert(options, {
                 title = employee.name,
-                description = gradeLabel .. ' | Salary: $' .. salary .. ' | ' .. onlineStatus,
+                description = gradeLabel .. ' | ' .. onlineStatus,
                 icon = 'fa-solid fa-user',
                 onSelect = function()
                     OpenEmployeeActionsMenu(ranchid, employee)
@@ -131,14 +122,6 @@ function OpenEmployeeActionsMenu(ranchid, employee)
             end
         },
         {
-            title = '💰 Set Salary',
-            description = 'Adjust employee salary',
-            icon = 'fa-solid fa-dollar-sign',
-            onSelect = function()
-                OpenSetSalaryDialog(ranchid, employee)
-            end
-        },
-        {
             title = '❌ Fire Employee',
             description = 'Remove employee from ranch',
             icon = 'fa-solid fa-user-times',
@@ -189,12 +172,6 @@ function OpenEmployeeDetailsMenu(ranchid, employee)
             title = 'Position',
             description = employee.grade_label or 'Unknown',
             icon = 'fa-solid fa-briefcase',
-            disabled = true
-        },
-        {
-            title = 'Salary',
-            description = '$' .. (employee.salary or 0) .. ' per interval',
-            icon = 'fa-solid fa-dollar-sign',
             disabled = true
         },
         {
@@ -276,95 +253,13 @@ function OpenHireConfirmDialog(ranchid, player)
                 {value = 1, label = 'Ranch Hand'},
                 {value = 2, label = 'Manager'},
             }
-        },
-        {
-            type = 'number',
-            label = 'Salary',
-            description = 'Enter salary per payment interval',
-            required = true,
-            default = 50,
-            min = 0
         }
     })
     
     if input then
-        TriggerServerEvent('rex-ranch:server:hireEmployee', ranchid, player.id, input[1], input[2])
+        TriggerServerEvent('rex-ranch:server:hireEmployee', ranchid, player.id, input[1])
         Wait(500)
         TriggerEvent('rex-ranch:client:openStaffManagement', ranchid)
     end
 end
 
----------------------------------------------
--- Set Salary Dialog
----------------------------------------------
-function OpenSetSalaryDialog(ranchid, employee)
-    local input = lib.inputDialog('Set Salary for ' .. employee.name, {
-        {
-            type = 'number',
-            label = 'New Salary',
-            description = 'Enter the new salary amount',
-            required = true,
-            default = employee.salary or 50,
-            min = 0
-        }
-    })
-    
-    if input and input[1] then
-        TriggerServerEvent('rex-ranch:server:setSalary', ranchid, employee.citizenid, input[1])
-        Wait(500)
-        TriggerEvent('rex-ranch:client:openStaffManagement', ranchid)
-    end
-end
-
----------------------------------------------
--- Salary Management Menu
----------------------------------------------
-function OpenSalaryManagementMenu(ranchid, staffData)
-    local options = {}
-    local totalSalaries = 0
-    
-    if not staffData or #staffData.employees == 0 then
-        table.insert(options, {
-            title = 'No employees found',
-            description = 'This ranch has no employees yet',
-            icon = 'fa-solid fa-info-circle',
-            disabled = true
-        })
-    else
-        for _, employee in ipairs(staffData.employees) do
-            local salary = employee.salary or 0
-            totalSalaries = totalSalaries + salary
-            
-            table.insert(options, {
-                title = employee.name,
-                description = employee.grade_label .. ' | $' .. salary .. ' per interval',
-                icon = 'fa-solid fa-dollar-sign',
-                onSelect = function()
-                    OpenSetSalaryDialog(ranchid, employee)
-                end
-            })
-        end
-        
-        table.insert(options, 1, {
-            title = '💵 Total Payroll',
-            description = '$' .. totalSalaries .. ' per payment interval',
-            icon = 'fa-solid fa-coins',
-            disabled = true
-        })
-    end
-    
-    table.insert(options, {
-        title = '⬅️ Back',
-        icon = 'fa-solid fa-arrow-left',
-        onSelect = function()
-            TriggerEvent('rex-ranch:client:openStaffManagement', ranchid)
-        end
-    })
-    
-    lib.registerContext({
-        id = 'salary_management_menu',
-        title = '💰 Salary Management',
-        options = options
-    })
-    lib.showContext('salary_management_menu')
-end
