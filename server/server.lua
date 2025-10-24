@@ -2943,6 +2943,14 @@ RegisterNetEvent('rex-ranch:server:fireEmployee', function(ranchid, targetCitize
         
         -- Player is online
         Target.Functions.SetJob('unemployed', 0)
+		-- update multijob
+		local success = exports['rsg-multijob']:RemoveJobFromPlayer(targetCitizenid, ranchid)
+		if success then
+			TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Player removed from multijob!'})
+		else
+			print('Failed to remove job - player may not have this job')
+			TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to remove job - player may not have this job!'})
+		end
         TriggerClientEvent('ox_lib:notify', Target.PlayerData.source, {type = 'error', description = 'You have been fired from ' .. ranchid .. '!'})
     else
         -- Player is offline, verify they work at this ranch first
@@ -2958,8 +2966,17 @@ RegisterNetEvent('rex-ranch:server:fireEmployee', function(ranchid, targetCitize
             return
         end
         
-        -- Update database
+        -- update database
         MySQL.update('UPDATE players SET job = JSON_SET(JSON_SET(job, "$.name", "unemployed"), "$.grade", JSON_OBJECT("level", 0, "name", "Unemployed")) WHERE citizenid = ?', {targetCitizenid})
+		-- update multijob
+		local success = exports['rsg-multijob']:RemoveJobFromPlayer(targetCitizenid, ranchid)
+		if success then
+			TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Player removed from multijob!'})
+		else
+			print('Failed to remove job - player may not have this job')
+			TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to remove job - player may not have this job!'})
+		end
+
     end
     
     TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Employee has been fired!'})
