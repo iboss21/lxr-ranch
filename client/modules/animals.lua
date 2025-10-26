@@ -8,6 +8,7 @@ local animalDataCache = {}
 local followStates = {}
 local transportingAnimals = {}
 local isBusy = false
+local wanderStates = {} -- Track wandering state for each animal
 
 ---------------------------------------------
 -- Spawn Manager (New System)
@@ -181,6 +182,11 @@ function SpawnManager:SpawnAnimal(animalId, animalData)
     -- Setup interaction
     self:SetupAnimalInteraction(entity, animalData)
     
+    -- Setup wandering behavior if enabled
+    if Config.AnimalWanderingEnabled then
+        self:SetupAnimalWandering(animalId, entity, animalData)
+    end
+    
     if Config.Debug then
         print('^2[SPAWN MANAGER]^7 Spawned animal ' .. animalId .. ' (entity: ' .. entity .. ')')
     end
@@ -274,6 +280,136 @@ function SpawnManager:SetupAnimalInteraction(entity, animalData)
     })
 end
 
+-- Setup animal wandering behavior
+function SpawnManager:SetupAnimalWandering(animalId, entity, animalData)
+    -- Store spawn point as home location
+    local homePosition = vector3(animalData.pos_x, animalData.pos_y, animalData.pos_z)
+    
+    -- Initialize wander state
+    wanderStates[animalId] = {
+        entity = entity,
+        homePosition = homePosition,
+        state = 'idle', -- 'idle' or 'moving'
+        stateChangeTime = GetGameTimer(),
+        targetPosition = nil,
+        active = true
+    }
+    
+    -- Start wander behavior thread
+    CreateThread(function()
+        while wanderStates[animalId] and wanderStates[animalId].active do
+            self:UpdateAnimalWander(animalId)
+            Wait(Config.WanderCheckInterval or 2000)
+        end
+    end)
+    
+    if Config.Debug then
+        print('^2[WANDER]^7 Setup wandering for animal ' .. animalId)
+    end
+end
+
+-- Update animal wandering behavior
+function SpawnManager:UpdateAnimalWander(animalId)
+    local wanderState = wanderStates[animalId]
+    if not wanderState then return end
+    
+    local entity = wanderState.entity
+    
+    -- Check if entity still exists
+    if not DoesEntityExist(entity) then
+        wanderStates[animalId] = nil
+        return
+    end
+    
+    -- Don't wander if following player or being transported
+    if followStates[animalId] or transportingAnimals[animalId] then
+        return
+    end
+    
+    local currentTime = GetGameTimer()
+    local timeSinceStateChange = currentTime - wanderState.stateChangeTime
+    
+    if wanderState.state == 'idle' then
+        -- Animal is standing still
+        local idleTime = math.random(Config.WanderIdleTimeMin or 10000, Config.WanderIdleTimeMax or 30000)
+        
+        if timeSinceStateChange >= idleTime then
+            -- Time to start moving
+            self:StartAnimalWander(animalId, wanderState)
+        end
+    elseif wanderState.state == 'moving' then
+        -- Animal is moving
+        local moveTime = math.random(Config.WanderMoveTimeMin or 5000, Config.WanderMoveTimeMax or 15000)
+        
+        -- Check if reached target or time expired
+        if wanderState.targetPosition then
+            local currentPos = GetEntityCoords(entity)
+            local distanceToTarget = #(currentPos - wanderState.targetPosition)
+            
+            if distanceToTarget < 1.0 or timeSinceStateChange >= moveTime then
+                -- Reached destination or timeout, stop moving
+                self:StopAnimalWander(animalId, wanderState)
+            end
+        else
+            -- No target, something went wrong, stop
+            self:StopAnimalWander(animalId, wanderState)
+        end
+    end
+end
+
+-- Start animal wandering to a new position
+function SpawnManager:StartAnimalWander(animalId, wanderState)
+    local entity = wanderState.entity
+    local homePos = wanderState.homePosition
+    
+    -- Generate random wander position within radius from home
+    local wanderRadius = Config.WanderRadius or 15.0
+    local minDistance = Config.WanderMinDistance or 3.0
+    
+    -- Random angle and distance
+    local angle = math.random() * math.pi * 2
+    local distance = math.random() * (wanderRadius - minDistance) + minDistance
+    
+    -- Calculate target position
+    local targetX = homePos.x + math.cos(angle) * distance
+    local targetY = homePos.y + math.sin(angle) * distance
+    
+    -- Get ground Z coordinate
+    local foundGround, groundZ = GetGroundZFor_3dCoord(targetX, targetY, homePos.z + 10.0, false)
+    local targetZ = foundGround and groundZ or homePos.z
+    
+    local targetPos = vector3(targetX, targetY, targetZ)
+    
+    -- Update state
+    wanderState.state = 'moving'
+    wanderState.targetPosition = targetPos
+    wanderState.stateChangeTime = GetGameTimer()
+    
+    -- Make animal walk to target
+    TaskGoToCoordAnyMeans(entity, targetX, targetY, targetZ, Config.WanderSpeed or 1.0, 0, false, 786603, 0xbf800000)
+    
+    if Config.Debug then
+        print('^3[WANDER]^7 Animal ' .. animalId .. ' started wandering to ' .. string.format('%.1f, %.1f, %.1f', targetX, targetY, targetZ))
+    end
+end
+
+-- Stop animal wandering and make it idle
+function SpawnManager:StopAnimalWander(animalId, wanderState)
+    local entity = wanderState.entity
+    
+    -- Clear tasks
+    ClearPedTasks(entity)
+    
+    -- Update state
+    wanderState.state = 'idle'
+    wanderState.targetPosition = nil
+    wanderState.stateChangeTime = GetGameTimer()
+    
+    if Config.Debug then
+        print('^2[WANDER]^7 Animal ' .. animalId .. ' stopped wandering (now idle)')
+    end
+end
+
 -- Despawn an animal
 function SpawnManager:DespawnAnimal(animalId)
     local animalInfo = self.entities[animalId]
@@ -300,6 +436,12 @@ function SpawnManager:DespawnAnimal(animalId)
         else
             DeletePed(entity)
         end
+    end
+    
+    -- Clean up wander state
+    if wanderStates[animalId] then
+        wanderStates[animalId].active = false
+        wanderStates[animalId] = nil
     end
     
     -- Report despawn to server so it can clear tracking
@@ -357,6 +499,10 @@ function SpawnManager:RemoveAnimal(animalId)
     -- Clean up related states
     followStates[animalKey] = nil
     transportingAnimals[animalKey] = nil
+    if wanderStates[animalKey] then
+        wanderStates[animalKey].active = false
+        wanderStates[animalKey] = nil
+    end
     
     -- Remove from cache
     for i, cachedAnimal in ipairs(animalDataCache) do
@@ -377,6 +523,12 @@ function SpawnManager:ClearAll()
         self:DespawnAnimal(animalId)
     end
     self.pending = {}
+    
+    -- Clean up all wander states
+    for animalId in pairs(wanderStates) do
+        wanderStates[animalId].active = false
+        wanderStates[animalId] = nil
+    end
     
     if Config.Debug then
         print('^3[SPAWN MANAGER]^7 Cleared all spawned animals')

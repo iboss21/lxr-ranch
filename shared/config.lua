@@ -44,6 +44,19 @@ Config.MinSurvivalStats = 0 -- minimum hunger/thirst before health starts decayi
 Config.HealthRegenerationRate = 2 -- health regeneration per cronjob run when well-fed and watered
 Config.MinStatsForRegeneration = 80 -- minimum hunger/thirst required for health regeneration
 Config.ImmediateHealthBoost = 5 -- immediate health boost when feeding/watering an unhealthy animal
+
+---------------------------------
+-- animal wandering settings
+---------------------------------
+Config.AnimalWanderingEnabled = true -- Enable animals to wander naturally
+Config.WanderRadius = 15.0 -- Maximum distance animals can wander from spawn point
+Config.WanderMinDistance = 3.0 -- Minimum distance for a wander movement
+Config.WanderSpeed = 1.0 -- Movement speed while wandering (1.0 = walk, 2.0 = jog)
+Config.WanderIdleTimeMin = 10000 -- Minimum time (ms) standing still before wandering
+Config.WanderIdleTimeMax = 30000 -- Maximum time (ms) standing still before wandering
+Config.WanderMoveTimeMin = 5000 -- Minimum time (ms) spent moving
+Config.WanderMoveTimeMax = 15000 -- Maximum time (ms) spent moving
+Config.WanderCheckInterval = 2000 -- How often to update wander behavior (ms)
 Config.FeedItem = 'animal_feed' -- item required to feed animals
 Config.WaterItem = 'water_bucket' -- item required to water animals
 Config.WaterBucketUses = 5 -- number of times water bucket can be used before becoming empty
