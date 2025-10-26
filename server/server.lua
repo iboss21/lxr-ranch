@@ -410,8 +410,9 @@ RegisterNetEvent('rex-ranch:server:requestAnimalSpawn', function(animalId, anima
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
-    if not Player or not isPlayerRanchStaff(Player) then
-        TriggerClientEvent('rex-ranch:client:spawnAnimalDenied', src, animalId, 'Not authorized')
+    -- Allow everyone to spawn/see animals, but interactions are still restricted client-side
+    if not Player then
+        TriggerClientEvent('rex-ranch:client:spawnAnimalDenied', src, animalId, 'Player not found')
         return
     end
     
@@ -627,9 +628,16 @@ RegisterNetEvent('rex-ranch:server:feedAnimal', function(data)
         print('^3[DEBUG]^7 Feeding animal ' .. animalid .. ' - Current hunger: ' .. (animal.hunger or 'null') .. ', health: ' .. (animal.health or 'null') .. ', thirst: ' .. (animal.thirst or 'null'))
     end
     
-    -- Update animal hunger
+    -- Calculate health boost if animal is unhealthy
+    local healthBoost = 0
+    if animal.health < 100 and Config.ImmediateHealthBoost then
+        healthBoost = math.min(Config.ImmediateHealthBoost, 100 - animal.health)
+    end
+    local newHealth = math.min(100, (animal.health or 100) + healthBoost)
+    
+    -- Update animal hunger and health
     local updateSuccess, updateError = pcall(function()
-        return MySQL.update.await('UPDATE rex_ranch_animals SET hunger = 100 WHERE animalid = ?', {animalid})
+        return MySQL.update.await('UPDATE rex_ranch_animals SET hunger = 100, health = ? WHERE animalid = ?', {newHealth, animalid})
     end)
     
     if updateSuccess and updateError and updateError > 0 then
@@ -637,10 +645,15 @@ RegisterNetEvent('rex-ranch:server:feedAnimal', function(data)
         if RSGCore.Shared.Items[Config.FeedItem] then
             TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[Config.FeedItem], 'remove', 1)
         end
-        TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Animal has been fed!'})
+        
+        local notifyMsg = 'Animal has been fed!'
+        if healthBoost > 0 then
+            notifyMsg = notifyMsg .. ' Health improved by ' .. healthBoost .. '%!'
+        end
+        TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = notifyMsg})
         
         -- Send immediate update to client (no need for full refresh)
-        TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', src, animalid, {hunger = 100})
+        TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', src, animalid, {hunger = 100, health = newHealth})
         
         if Config.Debug then
             print('^2[DEBUG]^7 Player ' .. src .. ' successfully fed animal ' .. animalid .. ' (updated ' .. updateError .. ' rows)')
@@ -700,9 +713,16 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
         print('^3[DEBUG]^7 Watering animal ' .. animalid .. ' - Current thirst: ' .. (animal.thirst or 'null') .. ', health: ' .. (animal.health or 'null') .. ', hunger: ' .. (animal.hunger or 'null'))
     end
     
-    -- Update animal thirst
+    -- Calculate health boost if animal is unhealthy
+    local healthBoost = 0
+    if animal.health < 100 and Config.ImmediateHealthBoost then
+        healthBoost = math.min(Config.ImmediateHealthBoost, 100 - animal.health)
+    end
+    local newHealth = math.min(100, (animal.health or 100) + healthBoost)
+    
+    -- Update animal thirst and health
     local updateSuccess, updateError = pcall(function()
-        return MySQL.update.await('UPDATE rex_ranch_animals SET thirst = 100 WHERE animalid = ?', {animalid})
+        return MySQL.update.await('UPDATE rex_ranch_animals SET thirst = 100, health = ? WHERE animalid = ?', {newHealth, animalid})
     end)
     
     if updateSuccess and updateError and updateError > 0 then
@@ -747,10 +767,14 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
             end
         end
         
-        TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Animal has been watered!'})
+        local notifyMsg = 'Animal has been watered!'
+        if healthBoost > 0 then
+            notifyMsg = notifyMsg .. ' Health improved by ' .. healthBoost .. '%!'
+        end
+        TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = notifyMsg})
         
         -- Send immediate update to client (no need for full refresh)
-        TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', src, animalid, {thirst = 100})
+        TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', src, animalid, {thirst = 100, health = newHealth})
         
         if Config.Debug then
             print('^2[DEBUG]^7 Player ' .. src .. ' successfully watered animal ' .. animalid .. ' (updated ' .. updateError .. ' rows)')
@@ -2560,6 +2584,14 @@ function ProcessAnimalSurvival()
                 newHealth = math.max(0, currentHealth - Config.HealthDecayRate)
                 if Config.Debug then
                     print('^3[DEBUG]^7 Animal ' .. animal.animalid .. ' is starving/dehydrated. Health: ' .. newHealth)
+                end
+            -- Check if animal is well-fed and watered for health regeneration
+            elseif currentHealth < 100 and Config.HealthRegenerationRate and Config.MinStatsForRegeneration then
+                if newHunger >= Config.MinStatsForRegeneration and newThirst >= Config.MinStatsForRegeneration then
+                    newHealth = math.min(100, currentHealth + Config.HealthRegenerationRate)
+                    if Config.Debug then
+                        print('^2[DEBUG]^7 Animal ' .. animal.animalid .. ' is regenerating health. Health: ' .. currentHealth .. ' -> ' .. newHealth)
+                    end
                 end
             end
             
