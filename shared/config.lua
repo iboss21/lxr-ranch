@@ -340,39 +340,13 @@ Config.RanchLocations = {
 }
 
 ---------------------------------
--- sale point locations
----------------------------------
-Config.SalePointLocations = {
-    { 
-        name = 'Livestock Market', -- testing Emerald Ranch
-        coords = vector3(1334.46, 301.40, 87.75),
-        npcmodel = `cs_valauctionboss_01`,
-        npccoords = vector4(1334.46, 301.40, 87.75, 281.66),
-        blipname = 'Livestock Market',
-        blipsprite = 'blip_shop_store',
-        blipscale = 0.2,
-        showblip = true
-    },
-    { 
-        name = 'Livestock Market', -- near strawberry
-        coords = vector3(-1791.83, -579.00, 155.95),
-        npcmodel = `cs_valauctionboss_01`,
-        npccoords = vector4(-1791.83, -579.00, 155.95, 28.21),
-        blipname = 'Livestock Market',
-        blipsprite = 'blip_shop_store',
-        blipscale = 0.2,
-        showblip = true
-    },
-}
-
----------------------------------
 -- water source locations
 ---------------------------------
 Config.WaterSourceLocations = {
-    -- Wells at each ranch
+    -- water point at each ranch
     { 
         name = 'Macfarlane Water Refill',
-        coords = vector3(-2412.50, -2395.00, 61.50),
+        coords = vec3(-2420.80, -2359.38, 61.18),
         blipname = 'Water Well',
         blipsprite = 'blip_shop_water',
         showblip = false,
@@ -380,7 +354,7 @@ Config.WaterSourceLocations = {
     },
     { 
         name = 'Emerald Water Refill',
-        coords = vector3(1389.44, 280.41, 88.82),
+        coords = vec3(1389.44, 280.41, 88.82),
         blipname = 'Water Well',
         blipsprite = 'blip_shop_water',
         showblip = false,
@@ -388,7 +362,7 @@ Config.WaterSourceLocations = {
     },
     { 
         name = 'Pronghorn Water Refill',
-        coords = vector3(-2555.00, 410.00, 148.50),
+        coords = vec3(-2533.16, 415.68, 148.14),
         blipname = 'Water Well',
         blipsprite = 'blip_shop_water',
         showblip = false,
@@ -396,7 +370,7 @@ Config.WaterSourceLocations = {
     },
     { 
         name = 'Downes Water Refill',
-        coords = vector3(-847.00, 343.00, 96.00),
+        coords = vec3(-859.76, 345.33, 96.44),
         blipname = 'Water Well',
         blipsprite = 'blip_shop_water',
         showblip = false,
@@ -404,7 +378,7 @@ Config.WaterSourceLocations = {
     },
     { 
         name = 'Hill Haven Water Refill',
-        coords = vector3(1375.00, -852.00, 70.50),
+        coords = vec3(1385.02, -846.09, 68.78),
         blipname = 'Water Well',
         blipsprite = 'blip_shop_water',
         showblip = false,
@@ -412,7 +386,7 @@ Config.WaterSourceLocations = {
     },
     { 
         name = 'Hanging Dog Water Refill',
-        coords = vector3(-2215.00, 730.00, 122.50),
+        coords = vec3(-2233.19, 711.64, 122.21),
         blipname = 'Water Well',
         blipsprite = 'blip_shop_water',
         showblip = false,
@@ -425,18 +399,18 @@ Config.WaterSourceLocations = {
 ---------------------------------
 Config.BuyPointLocations = {
     {
-        name = 'Livestock Dealer', -- testing Emerald Ranch
-        coords = vector3(1383.58, 292.34, 88.18),
+        name = 'Livestock Dealer (Buy Point)', -- valentine
+        coords = vector3(-218.78, 652.80, 113.27),
         npcmodel = `mp_u_m_m_trader_01`,
-        npccoords = vector4(1383.58, 292.34, 88.18, 267.87),
+        npccoords = vec4(-218.78, 652.80, 113.27, 241.67),
         blipname = 'Livestock Dealer',
         blipsprite = 'blip_shop_horse',
         blipscale = 0.2,
         showblip = true,
-        spawnpoint = vector4(1383.58, 292.34, 88.18, 267.87) -- Near the dealer
+        spawnpoint = vec4(-217.61, 649.48, 113.10, 195.09)
     },
     {
-        name = 'Livestock Dealer', -- near strawberry
+        name = 'Livestock Dealer (Buy Point)', -- near strawberry
         coords = vector3(-1834.75, -578.28, 155.97),
         npcmodel = `mp_u_m_m_trader_01`,
         npccoords = vector4(-1834.75, -578.28, 155.97, 304.67),
@@ -444,6 +418,54 @@ Config.BuyPointLocations = {
         blipsprite = 'blip_shop_horse',
         blipscale = 0.2,
         showblip = true,
-        spawnpoint = vector4(-1830.77, -576.25, 155.97, 291.70) -- Near the trader
-    }
+        spawnpoint = vector4(-1830.77, -576.25, 155.97, 291.70)
+    },
+    {
+        name = 'Livestock Dealer (Buy Point)', -- wallace station
+        coords = vector3(-1309.82, 387.21, 95.35),
+        npcmodel = `mp_u_m_m_trader_01`,
+        npccoords = vector4(-1309.82, 387.21, 95.35, 167.82),
+        blipname = 'Livestock Dealer',
+        blipsprite = 'blip_shop_horse',
+        blipscale = 0.2,
+        showblip = true,
+        spawnpoint = vec4(-1311.06, 385.14, 95.51, 95.24)
+    },
+
+}
+
+---------------------------------
+-- sale point locations
+---------------------------------
+Config.SalePointLocations = {
+    { 
+        name = 'Livestock Market (Sell Point)', -- valentine
+        coords = vector3(-230.28, 637.59, 113.38),
+        npcmodel = `cs_valauctionboss_01`,
+        npccoords = vec4(-230.28, 637.59, 113.38, 243.69),
+        blipname = 'Livestock Market',
+        blipsprite = 'blip_shop_store',
+        blipscale = 0.2,
+        showblip = true
+    },
+    { 
+        name = 'Livestock Market (Sell Point)', -- near strawberry
+        coords = vector3(-1791.83, -579.00, 155.95),
+        npcmodel = `cs_valauctionboss_01`,
+        npccoords = vector4(-1791.83, -579.00, 155.95, 28.21),
+        blipname = 'Livestock Market',
+        blipsprite = 'blip_shop_store',
+        blipscale = 0.2,
+        showblip = true
+    },
+    { 
+        name = 'Livestock Market (Sell Point)', -- wallace station
+        coords = vector3(-1308.77, 375.84, 96.4),
+        npcmodel = `cs_valauctionboss_01`,
+        npccoords = vec4(-1308.77, 375.84, 96.46, 90.13),
+        blipname = 'Livestock Market',
+        blipsprite = 'blip_shop_store',
+        blipscale = 0.2,
+        showblip = true
+    },
 }
