@@ -692,9 +692,17 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
     if not animalid then return end
     
     -- Check if player has water bucket in inventory
-    local hasWater = Player.Functions.GetItemByName(Config.WaterItem)
-    if not hasWater or hasWater.amount < 1 then
-        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You need a ' .. Config.WaterItem .. ' to water the animals!'})
+    local item = Player.Functions.GetItemByName('water_bucket')
+    if not item then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You need a water bucket to water the animals!'})
+        return
+    end
+    
+    -- Get current uses, default to 0 if no metadata
+    local currentUses = (item.info and item.info.uses) or 0
+    
+    if currentUses <= 0 then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Your water bucket is empty! Refill it at a water source.'})
         return
     end
     
@@ -726,46 +734,13 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
     end)
     
     if updateSuccess and updateError and updateError > 0 then
-        -- Handle water bucket durability/uses
-        local waterBucket = Player.Functions.GetItemByName(Config.WaterItem)
-        if waterBucket then
-            local maxUses = Config.WaterBucketUses or 5
-            local currentUses = waterBucket.info and waterBucket.info.uses or 0
-            local remainingUses = maxUses - currentUses - 1
-            
-            if remainingUses <= 0 then
-                -- Remove full bucket and give empty bucket
-                Player.Functions.RemoveItem(Config.WaterItem, 1, waterBucket.slot)
-                
-                -- Add empty bucket if configured
-                if Config.EmptyWaterBucket then
-                    local emptyInfo = {
-                        description = 'An empty water bucket. Refill at a water source.'
-                    }
-                    Player.Functions.AddItem(Config.EmptyWaterBucket, 1, false, emptyInfo)
-                    if RSGCore.Shared.Items[Config.EmptyWaterBucket] then
-                        TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[Config.EmptyWaterBucket], 'add', 1)
-                    end
-                end
-                
-                TriggerClientEvent('ox_lib:notify', src, {type = 'info', description = 'Your water bucket is now empty! Refill it at a water source.'})
-            else
-                -- Remove old bucket and add new one with updated uses
-                Player.Functions.RemoveItem(Config.WaterItem, 1, waterBucket.slot)
-                
-                local updatedInfo = {
-                    uses = currentUses + 1,
-                    description = 'Water for your animals. Uses left: ' .. remainingUses
-                }
-                Player.Functions.AddItem(Config.WaterItem, 1, false, updatedInfo)
-                
-                TriggerClientEvent('ox_lib:notify', src, {type = 'info', description = 'Water bucket uses left: ' .. remainingUses})
-            end
-            
-            if RSGCore.Shared.Items[Config.WaterItem] then
-                TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[Config.WaterItem], 'remove', 1)
-            end
-        end
+        -- Remove old bucket and add new one with decreased uses
+        Player.Functions.RemoveItem('water_bucket', 1, item.slot)
+        
+        local newUses = currentUses - 1
+        local newDescription = newUses > 0 and ('Water Bucket - ' .. newUses .. ' use' .. (newUses > 1 and 's' or '') .. ' left') or 'Empty Water Bucket'
+        Player.Functions.AddItem('water_bucket', 1, nil, {uses = newUses, description = newDescription})
+        TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items['water_bucket'], 'remove', 1)
         
         local notifyMsg = 'Animal has been watered!'
         if healthBoost > 0 then
@@ -796,46 +771,24 @@ RegisterNetEvent('rex-ranch:server:fillWaterBucket', function()
     
     if not Player then return end
     
-    -- Check if player has empty bucket or partially used bucket
-    local hasEmptyBucket = Player.Functions.GetItemByName(Config.EmptyWaterBucket)
-    local hasPartialBucket = Player.Functions.GetItemByName(Config.WaterItem)
+    local item = Player.Functions.GetItemByName('water_bucket')
     
-    if not hasEmptyBucket and not hasPartialBucket then
-        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You need a water bucket to fill!'})
+    if not item then
+        TriggerClientEvent('ox_lib:notify', src, {title = 'No Bucket', type = 'error', duration = 3000 })
         return
     end
     
-    -- Check if player has money if refill costs
-    if Config.WaterRefillCost > 0 then
-        if Player.PlayerData.money.cash < Config.WaterRefillCost then
-            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You need $' .. Config.WaterRefillCost .. ' to refill!'})
-            return
-        end
-        Player.Functions.RemoveMoney('cash', Config.WaterRefillCost)
-    end
+    -- Get current uses, default to 0 if no metadata
+    local currentUses = (item.info and item.info.uses) or 0
     
-    -- Remove old bucket (empty or partial)
-    if hasEmptyBucket then
-        Player.Functions.RemoveItem(Config.EmptyWaterBucket, 1, hasEmptyBucket.slot)
-    elseif hasPartialBucket then
-        Player.Functions.RemoveItem(Config.WaterItem, 1, hasPartialBucket.slot)
-    end
-    
-    -- Give new full bucket with fresh metadata
-    local info = {
-        uses = 0,
-        description = 'Water for your animals. Uses left: ' .. (Config.WaterBucketUses or 5)
-    }
-    Player.Functions.AddItem(Config.WaterItem, 1, false, info)
-    
-    if RSGCore.Shared.Items[Config.WaterItem] then
-        TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items[Config.WaterItem], 'add', 1)
-    end
-    
-    TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Water bucket filled!'})
-    
-    if Config.Debug then
-        print('^2[DEBUG]^7 Player ' .. src .. ' filled water bucket')
+    -- Only fill if bucket is empty (0 uses)
+    if currentUses == 0 then
+        Player.Functions.RemoveItem('water_bucket', 1, item.slot)
+        Player.Functions.AddItem('water_bucket', 1, nil, {uses = 5, description = 'Water Bucket - 5 uses left'})
+        TriggerClientEvent('rsg-inventory:client:ItemBox', src, RSGCore.Shared.Items['water_bucket'], 'add', 1)
+        TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Water bucket filled!'})
+    else
+        TriggerClientEvent('ox_lib:notify', src, {title = 'Bucket Not Empty', type = 'error', duration = 3000 })
     end
 end)
 

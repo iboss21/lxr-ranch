@@ -59,8 +59,7 @@ Config.WanderMoveTimeMax = 15000 -- Maximum time (ms) spent moving
 Config.WanderCheckInterval = 2000 -- How often to update wander behavior (ms)
 Config.FeedItem = 'animal_feed' -- item required to feed animals
 Config.WaterItem = 'water_bucket' -- item required to water animals
-Config.WaterBucketUses = 5 -- number of times water bucket can be used before becoming empty
-Config.EmptyWaterBucket = 'empty_water_bucket' -- empty bucket item name
+Config.WaterBucketUses = 5 -- number of times water bucket can be used before needing refill
 Config.WaterRefillCost = 0 -- cost to refill bucket (set to 0 for free)
 
 ---------------------------------
