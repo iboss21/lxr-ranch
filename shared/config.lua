@@ -57,6 +57,10 @@ Config.WanderIdleTimeMax = 30000 -- Maximum time (ms) standing still before wand
 Config.WanderMoveTimeMin = 5000 -- Minimum time (ms) spent moving
 Config.WanderMoveTimeMax = 15000 -- Maximum time (ms) spent moving
 Config.WanderCheckInterval = 2000 -- How often to update wander behavior (ms)
+
+---------------------------------
+-- animal feed/water settings
+---------------------------------
 Config.FeedItem = 'animal_feed' -- item required to feed animals
 Config.WaterItem = 'water_bucket' -- item required to water animals
 Config.WaterBucketUses = 5 -- number of times water bucket can be used before needing refill
