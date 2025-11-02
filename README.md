@@ -5,7 +5,7 @@ A comprehensive ranching simulation system for RedM servers, featuring realistic
 ## 🌟 Key Features
 
 ### 🐄 Advanced Animal Management
-- **Multiple Animal Types**: Cows, Bulls, Sheep, Pigs, and Horses with unique behaviors
+- **Multiple Animal Types**: Cows (currently) : Bulls, Sheep, Pigs, and Horses (future) with unique behaviors
 - **Realistic Aging System**: Visual scaling and stat progression over time
 - **Comprehensive Care**: Health, hunger, and thirst management with automatic decay
 - **Breeding System**: Full breeding mechanics with gestation periods and offspring
@@ -261,7 +261,7 @@ Configure animal production in `Config.AnimalProducts`:
 1. Verify player has ranch job access
 2. Check Config.HerdingEnabled = true
 3. Ensure animals are within Config.HerdingDistance
-4. Verify rsg-target dependency is loaded
+4. Verify ox_target dependency is loaded
 5. Check for conflicting resources affecting animal entities
 ```
 
