@@ -356,58 +356,15 @@ Config.RanchLocations = {
 }
 
 ---------------------------------
--- water source locations
+-- water props
 ---------------------------------
-Config.WaterSourceLocations = {
-    -- water point at each ranch
-    { 
-        name = 'Macfarlane Water Refill',
-        coords = vec3(-2420.80, -2359.38, 61.18),
-        blipname = 'Water Well',
-        blipsprite = 'blip_shop_water',
-        showblip = false,
-        promptText = 'Fill Water Bucket'
-    },
-    { 
-        name = 'Emerald Water Refill',
-        coords = vec3(1389.44, 280.41, 88.82),
-        blipname = 'Water Well',
-        blipsprite = 'blip_shop_water',
-        showblip = false,
-        promptText = 'Fill Water Bucket'
-    },
-    { 
-        name = 'Pronghorn Water Refill',
-        coords = vec3(-2533.16, 415.68, 148.14),
-        blipname = 'Water Well',
-        blipsprite = 'blip_shop_water',
-        showblip = false,
-        promptText = 'Fill Water Bucket'
-    },
-    { 
-        name = 'Downes Water Refill',
-        coords = vec3(-859.76, 345.33, 96.44),
-        blipname = 'Water Well',
-        blipsprite = 'blip_shop_water',
-        showblip = false,
-        promptText = 'Fill Water Bucket'
-    },
-    { 
-        name = 'Hill Haven Water Refill',
-        coords = vec3(1385.02, -846.09, 68.78),
-        blipname = 'Water Well',
-        blipsprite = 'blip_shop_water',
-        showblip = false,
-        promptText = 'Fill Water Bucket'
-    },
-    { 
-        name = 'Hanging Dog Water Refill',
-        coords = vec3(-2233.19, 711.64, 122.21),
-        blipname = 'Water Well',
-        blipsprite = 'blip_shop_water',
-        showblip = false,
-        promptText = 'Fill Water Bucket'
-    }
+Config.WaterProps = {
+    `p_wellpumpnbx01x`,
+    `p_watertrough01x`,
+    `p_watertroughsml01x`,
+    `p_watertrough01x_new`,
+    `p_watertrough02x`,
+    `p_watertrough03x`,
 }
 
 ---------------------------------
