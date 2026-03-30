@@ -1,3 +1,11 @@
+--[[ ═══════════════════════════════════════════════════════════════════════════
+     🐺 LXR-RANCH — The Land of Wolves
+     ═══════════════════════════════════════════════════════════════════════════
+     Developer   : iBoss21 | Brand : The Lux Empire
+     https://www.wolves.land | https://discord.gg/CrKcWdfd3A
+     ═══════════════════════════════════════════════════════════════════════════
+     © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+     ═══════════════════════════════════════════════════════════════════════════ ]]
 local RSGCore = exports['rsg-core']:GetCoreObject()
 lib.locale()
 
@@ -132,7 +140,7 @@ function SpawnManager:RequestSpawn(animalId, animalData)
         timestamp = GetGameTimer()
     }
     
-    TriggerServerEvent('rex-ranch:server:requestAnimalSpawn', animalId, animalData)
+    TriggerServerEvent('lxr-ranch:server:requestAnimalSpawn', animalId, animalData)
     
     if Config.Debug then
         print('^3[SPAWN MANAGER]^7 Requested spawn for animal ' .. animalId)
@@ -270,7 +278,7 @@ function SpawnManager:SetupAnimalInteraction(entity, animalData)
             icon = 'far fa-eye',
             label = 'Animal Actions',
             onSelect = function()
-                TriggerEvent('rex-ranch:client:animalmenu', entity, animalData)
+                TriggerEvent('lxr-ranch:client:animalmenu', entity, animalData)
             end,
             canInteract = function()
                 return isPlayerRanchStaff()
@@ -445,7 +453,7 @@ function SpawnManager:DespawnAnimal(animalId)
     end
     
     -- Report despawn to server so it can clear tracking
-    TriggerServerEvent('rex-ranch:server:reportDespawn', animalId)
+    TriggerServerEvent('lxr-ranch:server:reportDespawn', animalId)
     
     -- Clean up data
     self.entities[animalId] = nil
@@ -657,7 +665,7 @@ local function finalizeAnimalMenu(menuOptions, freshData, animal)
         title = 'Animal Actions',
         description = 'Care for your animal',
         icon = 'fa-solid fa-hand-holding-heart',
-        event = 'rex-ranch:client:actionsmenu',
+        event = 'lxr-ranch:client:actionsmenu',
         args = { animalid = freshData.animalid, animal = animal },
         arrow = true
     })
@@ -677,11 +685,11 @@ end
 -- Player loaded - initialize system
 RegisterNetEvent('RSGCore:Client:OnPlayerLoaded', function()
     SpawnManager:Initialize()
-    TriggerServerEvent('rex-ranch:server:refreshAnimals')
+    TriggerServerEvent('lxr-ranch:server:refreshAnimals')
 end)
 
 -- Receive animal data from server
-RegisterNetEvent('rex-ranch:client:spawnAnimals', function(animalData)
+RegisterNetEvent('lxr-ranch:client:spawnAnimals', function(animalData)
     -- Check if this is a single animal or a full refresh
     -- Single animals are sent as 1-item arrays after purchase
     if #animalData == 1 then
@@ -719,12 +727,12 @@ RegisterNetEvent('rex-ranch:client:spawnAnimals', function(animalData)
 end)
 
 -- Server grants spawn permission
-RegisterNetEvent('rex-ranch:client:spawnAnimalGranted', function(animalId, animalData)
+RegisterNetEvent('lxr-ranch:client:spawnAnimalGranted', function(animalId, animalData)
     SpawnManager:SpawnAnimal(animalId, animalData)
 end)
 
 -- Server denies spawn request
-RegisterNetEvent('rex-ranch:client:spawnAnimalDenied', function(animalId, reason)
+RegisterNetEvent('lxr-ranch:client:spawnAnimalDenied', function(animalId, reason)
     SpawnManager.pending[animalId] = nil
     
     if Config.Debug then
@@ -733,18 +741,18 @@ RegisterNetEvent('rex-ranch:client:spawnAnimalDenied', function(animalId, reason
 end)
 
 -- Force refresh animals from server
-RegisterNetEvent('rex-ranch:client:refreshAnimals', function()
+RegisterNetEvent('lxr-ranch:client:refreshAnimals', function()
     SpawnManager:ClearAll()
-    TriggerServerEvent('rex-ranch:server:refreshAnimals')
+    TriggerServerEvent('lxr-ranch:server:refreshAnimals')
 end)
 
 -- Remove specific animal
-RegisterNetEvent('rex-ranch:client:removeAnimal', function(animalid)
+RegisterNetEvent('lxr-ranch:client:removeAnimal', function(animalid)
     SpawnManager:RemoveAnimal(animalid)
 end)
 
 -- Update single animal data
-RegisterNetEvent('rex-ranch:client:refreshSingleAnimal', function(animalid, updatedData)
+RegisterNetEvent('lxr-ranch:client:refreshSingleAnimal', function(animalid, updatedData)
     for i, cachedAnimal in ipairs(animalDataCache) do
         if cachedAnimal.animalid == animalid then
             for key, value in pairs(updatedData) do
@@ -756,7 +764,7 @@ RegisterNetEvent('rex-ranch:client:refreshSingleAnimal', function(animalid, upda
 end)
 
 -- Update animal status (breeding, etc)
-RegisterNetEvent('rex-ranch:client:updateAnimalStatus', function(animalid, updatedData)
+RegisterNetEvent('lxr-ranch:client:updateAnimalStatus', function(animalid, updatedData)
     local targetId = tostring(animalid)
     
     for i, cachedAnimal in ipairs(animalDataCache) do
@@ -776,7 +784,7 @@ RegisterNetEvent('rex-ranch:client:updateAnimalStatus', function(animalid, updat
 end)
 
 -- Set transport mode (prevents despawning)
-RegisterNetEvent('rex-ranch:client:setAnimalTransporting', function(animalIds, transporting)
+RegisterNetEvent('lxr-ranch:client:setAnimalTransporting', function(animalIds, transporting)
     if type(animalIds) == 'table' then
         for _, animalId in ipairs(animalIds) do
             local key = tostring(animalId)
@@ -799,7 +807,7 @@ end)
 ---------------------------------------------
 
 -- Animal menu
-RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
+RegisterNetEvent('lxr-ranch:client:animalmenu', function(animal, data)
     if not DoesEntityExist(animal) or not data or not data.animalid then
         lib.notify({ title = 'Error', description = 'Invalid animal data!', type = 'error' })
         return
@@ -891,12 +899,12 @@ RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
     
     -- Get detailed breeding status from server (includes cooldown information)
     if Config.BreedingEnabled and (freshData.gender == 'female' or freshData.gender == 'male') then
-        RSGCore.Functions.TriggerCallback('rex-ranch:server:getBreedingStatus', function(breedingData)
+        RSGCore.Functions.TriggerCallback('lxr-ranch:server:getBreedingStatus', function(breedingData)
             local breedingOption = nil
         
         if breedingData.status == 'pregnant' then
             -- Get pregnancy progress for pregnant animals
-            RSGCore.Functions.TriggerCallback('rex-ranch:server:getPregnancyProgress', function(progressData)
+            RSGCore.Functions.TriggerCallback('lxr-ranch:server:getPregnancyProgress', function(progressData)
                 if progressData and progressData.isPregnant then
                     breedingOption = {
                         title = 'Breeding: Pregnant',
@@ -977,7 +985,7 @@ RegisterNetEvent('rex-ranch:client:animalmenu', function(animal, data)
                 title = buttonTitle,
                 description = buttonDesc,
                 icon = 'fa-solid fa-search',
-                event = 'rex-ranch:client:findBreedingPartner',
+                event = 'lxr-ranch:client:findBreedingPartner',
                 args = { animalid = freshData.animalid, animal = animal }
             })
             
@@ -1016,7 +1024,7 @@ end
 end)
 
 -- Animal actions menu
-RegisterNetEvent('rex-ranch:client:actionsmenu', function(data)
+RegisterNetEvent('lxr-ranch:client:actionsmenu', function(data)
     local animalid = data.animalid
     local animal = data.animal
     
@@ -1039,7 +1047,7 @@ RegisterNetEvent('rex-ranch:client:actionsmenu', function(data)
                 title = 'Toggle Follow ('..followStatus..')',
                 description = 'Make the animal follow you or stay put',
                 icon = followStates[animalid] and 'fa-solid fa-user-check' or 'fa-solid fa-walking',
-                event = 'rex-ranch:client:animalfollow',
+                event = 'lxr-ranch:client:animalfollow',
                 args = { animal = animal, animalid = animalid }
             },
             {
@@ -1050,14 +1058,14 @@ RegisterNetEvent('rex-ranch:client:actionsmenu', function(data)
                 title = 'Feed Animal ('..hungerStatus..')',
                 description = 'Requires: '..RSGCore.Shared.Items[Config.FeedItem].label,
                 icon = 'fa-solid fa-wheat-awn',
-                event = 'rex-ranch:client:feedAnimal',
+                event = 'lxr-ranch:client:feedAnimal',
                 args = { animalid = animalid, animal = animal }
             },
             {
                 title = 'Water Animal ('..thirstStatus..')',
                 description = 'Requires: '..RSGCore.Shared.Items[Config.WaterItem].label,
                 icon = 'fa-solid fa-droplet',
-                event = 'rex-ranch:client:waterAnimal',
+                event = 'lxr-ranch:client:waterAnimal',
                 args = { animalid = animalid, animal = animal }
             },
             {
@@ -1068,7 +1076,7 @@ RegisterNetEvent('rex-ranch:client:actionsmenu', function(data)
                 title = 'Check Products',
                 description = 'See what products this animal can produce',
                 icon = 'fa-solid fa-gift',
-                event = 'rex-ranch:client:checkProducts',
+                event = 'lxr-ranch:client:checkProducts',
                 args = { animalid = animalid, animal = animal }
             },
         }
@@ -1077,7 +1085,7 @@ RegisterNetEvent('rex-ranch:client:actionsmenu', function(data)
 end)
 
 -- Animal follow system
-RegisterNetEvent('rex-ranch:client:animalfollow', function(data)
+RegisterNetEvent('lxr-ranch:client:animalfollow', function(data)
     if not DoesEntityExist(data.animal) or not DoesEntityExist(cache.ped) then
         lib.notify({ title = 'Error', description = 'Invalid animal or player!', type = 'error' })
         return
@@ -1103,13 +1111,13 @@ RegisterNetEvent('rex-ranch:client:animalfollow', function(data)
         local currentPos = GetEntityCoords(data.animal)
         local heading = GetEntityHeading(data.animal)
         ClearPedTasks(data.animal)
-        TriggerServerEvent('rex-ranch:server:saveAnimalPosition', data.animalid, currentPos.x, currentPos.y, currentPos.z, heading)
+        TriggerServerEvent('lxr-ranch:server:saveAnimalPosition', data.animalid, currentPos.x, currentPos.y, currentPos.z, heading)
         lib.notify({ title = 'Animal Stopped', description = 'The animal stopped following you.', duration = 5000, type = 'info' })
     end
 end)
 
 -- Feed animal
-RegisterNetEvent('rex-ranch:client:feedAnimal', function(data)
+RegisterNetEvent('lxr-ranch:client:feedAnimal', function(data)
     local animal = data.animal
     local animalid = data.animalid
     
@@ -1130,7 +1138,7 @@ RegisterNetEvent('rex-ranch:client:feedAnimal', function(data)
         ClearPedTasksImmediately(cache.ped)
         SetCurrentPedWeapon(cache.ped, `WEAPON_UNARMED`, true)
         FreezeEntityPosition(cache.ped, false)
-        TriggerServerEvent('rex-ranch:server:feedAnimal', animalid)
+        TriggerServerEvent('lxr-ranch:server:feedAnimal', animalid)
         LocalPlayer.state:set('inv_busy', false, true)
         isBusy = false
     else
@@ -1139,7 +1147,7 @@ RegisterNetEvent('rex-ranch:client:feedAnimal', function(data)
 end)
 
 -- Water animal
-RegisterNetEvent('rex-ranch:client:waterAnimal', function(data)
+RegisterNetEvent('lxr-ranch:client:waterAnimal', function(data)
     local animal = data.animal
     local animalid = data.animalid
     
@@ -1160,7 +1168,7 @@ RegisterNetEvent('rex-ranch:client:waterAnimal', function(data)
         ClearPedTasks(cache.ped)
         SetCurrentPedWeapon(cache.ped, `WEAPON_UNARMED`, true)
         FreezeEntityPosition(cache.ped, false)
-        TriggerServerEvent('rex-ranch:server:waterAnimal', animalid)
+        TriggerServerEvent('lxr-ranch:server:waterAnimal', animalid)
         LocalPlayer.state:set('inv_busy', false, true)
         isBusy = false
     else
@@ -1169,7 +1177,7 @@ RegisterNetEvent('rex-ranch:client:waterAnimal', function(data)
 end)
 
 -- Check products
-RegisterNetEvent('rex-ranch:client:checkProducts', function(data)
+RegisterNetEvent('lxr-ranch:client:checkProducts', function(data)
     local animalid = data.animalid
     local animal = data.animal
     
@@ -1178,7 +1186,7 @@ RegisterNetEvent('rex-ranch:client:checkProducts', function(data)
         return
     end
     
-    RSGCore.Functions.TriggerCallback('rex-ranch:server:getAnimalProductionStatus', function(productionData)
+    RSGCore.Functions.TriggerCallback('lxr-ranch:server:getAnimalProductionStatus', function(productionData)
         if not productionData then
             lib.notify({ title = 'No Production', description = 'This animal doesn\'t produce anything!', type = 'info' })
             return
@@ -1225,7 +1233,7 @@ RegisterNetEvent('rex-ranch:client:checkProducts', function(data)
                 title = 'Collect ' .. productionData.productName,
                 description = 'Collect ' .. productionData.productAmount .. ' ' .. productionData.productName .. ' from this animal',
                 icon = 'fa-solid fa-hand-holding',
-                event = 'rex-ranch:client:collectProduct',
+                event = 'lxr-ranch:client:collectProduct',
                 args = { animalid = animalid, animal = animal }
             })
         end
@@ -1241,7 +1249,7 @@ RegisterNetEvent('rex-ranch:client:checkProducts', function(data)
 end)
 
 -- Collect product
-RegisterNetEvent('rex-ranch:client:collectProduct', function(data)
+RegisterNetEvent('lxr-ranch:client:collectProduct', function(data)
     local animal = data.animal
     local animalid = data.animalid
     
@@ -1261,7 +1269,7 @@ RegisterNetEvent('rex-ranch:client:collectProduct', function(data)
         ClearPedTasks(cache.ped)
         SetCurrentPedWeapon(cache.ped, `WEAPON_UNARMED`, true)
         FreezeEntityPosition(cache.ped, false)
-        TriggerServerEvent('rex-ranch:server:collectProduct', animalid)
+        TriggerServerEvent('lxr-ranch:server:collectProduct', animalid)
         LocalPlayer.state:set('inv_busy', false, true)
         isBusy = false
     end
@@ -1305,7 +1313,7 @@ RegisterCommand('cleanupranchanimals', function()
         SpawnManager:CleanupOrphanedEntities()
         
         -- Refresh from server
-        TriggerServerEvent('rex-ranch:server:refreshAnimals')
+        TriggerServerEvent('lxr-ranch:server:refreshAnimals')
         
         lib.notify({ title = 'Ranch Animals', description = 'Cleanup completed!', type = 'success' })
     else
@@ -1341,7 +1349,7 @@ RegisterCommand('testproduction', function(source, args)
     
     lib.notify({ title = 'Testing', description = 'Testing production for animal ' .. animalid .. '...', type = 'info' })
     
-    RSGCore.Functions.TriggerCallback('rex-ranch:server:getAnimalProductionStatus', function(productionData)
+    RSGCore.Functions.TriggerCallback('lxr-ranch:server:getAnimalProductionStatus', function(productionData)
         if Config.Debug then
             print('^3[CLIENT PRODUCTION TEST]^7 Result for animal ' .. animalid .. ':')
             if productionData then
@@ -1374,12 +1382,12 @@ end, false)
 ---------------------------------------------
 
 -- Find breeding partner (from animal info menu)
-RegisterNetEvent('rex-ranch:client:findBreedingPartner', function(data)
+RegisterNetEvent('lxr-ranch:client:findBreedingPartner', function(data)
     local animalid = data.animalid
     local PlayerData = RSGCore.Functions.GetPlayerData()
     local ranchid = PlayerData.job.name
     
-    RSGCore.Functions.TriggerCallback('rex-ranch:server:getAvailableAnimalsForBreeding', function(availableAnimals)
+    RSGCore.Functions.TriggerCallback('lxr-ranch:server:getAvailableAnimalsForBreeding', function(availableAnimals)
         if not availableAnimals or #availableAnimals == 0 then
             lib.notify({ 
                 title = 'No Partners Available', 
@@ -1422,7 +1430,7 @@ RegisterNetEvent('rex-ranch:client:findBreedingPartner', function(data)
                     { label = 'Distance', value = partner.distance .. 'm' }
                 },
                 disabled = not partner.canBreed,
-                event = partner.canBreed and 'rex-ranch:client:confirmBreeding' or nil,
+                event = partner.canBreed and 'lxr-ranch:client:confirmBreeding' or nil,
                 args = partner.canBreed and { 
                     animal1id = animalid, 
                     animal2id = partner.animalid,
@@ -1443,7 +1451,7 @@ RegisterNetEvent('rex-ranch:client:findBreedingPartner', function(data)
 end)
 
 -- Confirm breeding (from animal info menu)
-RegisterNetEvent('rex-ranch:client:confirmBreeding', function(data)
+RegisterNetEvent('lxr-ranch:client:confirmBreeding', function(data)
     local animal1id = data.animal1id
     local animal2id = data.animal2id
     local partner = data.partner
@@ -1458,7 +1466,7 @@ RegisterNetEvent('rex-ranch:client:confirmBreeding', function(data)
     })
     
     if alert == 'confirm' then
-        TriggerServerEvent('rex-ranch:server:startBreeding', animal1id, animal2id)
+        TriggerServerEvent('lxr-ranch:server:startBreeding', animal1id, animal2id)
     end
 end)
 
@@ -1635,3 +1643,8 @@ CreateThread(function()
         SpawnManager:Initialize()
     end
 end)
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 🐺 wolves.land — The Land of Wolves
+-- © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+-- ═══════════════════════════════════════════════════════════════════════════════

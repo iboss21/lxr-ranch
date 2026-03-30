@@ -1,0 +1,653 @@
+/* ============================================================================
+   wolves.land NUI Design System
+   LXR Ranch - Ranch Management Dashboard
+   ============================================================================ */
+
+/* --------------------------------------------------------------------------
+   CSS Variables (--wl-* Design Tokens)
+   -------------------------------------------------------------------------- */
+:root {
+    /* Surface & Background */
+    --wl-bg-dark:           rgba(15, 12, 10, 0.92);
+    --wl-bg-panel:          rgba(22, 18, 14, 0.96);
+    --wl-bg-card:           rgba(32, 26, 20, 0.85);
+    --wl-bg-card-hover:     rgba(42, 34, 26, 0.90);
+    --wl-bg-input:          rgba(18, 14, 10, 0.70);
+
+    /* Parchment */
+    --wl-parchment:         #c8b48a;
+    --wl-parchment-dark:    #a8936a;
+    --wl-parchment-light:   #ddd0b3;
+    --wl-parchment-bg:      rgba(180, 156, 110, 0.12);
+
+    /* Gold Accents */
+    --wl-gold:              #c9a84c;
+    --wl-gold-light:        #dfc06e;
+    --wl-gold-dark:         #a68832;
+    --wl-gold-glow:         rgba(201, 168, 76, 0.25);
+    --wl-gold-subtle:       rgba(201, 168, 76, 0.08);
+
+    /* Text */
+    --wl-text-primary:      #d4c8a8;
+    --wl-text-secondary:    #9e917a;
+    --wl-text-muted:        #6b6052;
+    --wl-text-bright:       #efe3c7;
+
+    /* Semantic */
+    --wl-success:           #6a9e4e;
+    --wl-warning:           #c49a3c;
+    --wl-danger:            #a44e3a;
+    --wl-info:              #5a8ea0;
+
+    /* Borders */
+    --wl-border:            rgba(201, 168, 76, 0.15);
+    --wl-border-strong:     rgba(201, 168, 76, 0.30);
+
+    /* Shadows */
+    --wl-shadow-sm:         0 1px 3px rgba(0, 0, 0, 0.40);
+    --wl-shadow-md:         0 3px 8px rgba(0, 0, 0, 0.50);
+    --wl-shadow-lg:         0 6px 20px rgba(0, 0, 0, 0.60);
+
+    /* Typography */
+    --wl-font-heading:      'Playfair Display', 'Georgia', serif;
+    --wl-font-script:       'Great Vibes', cursive;
+    --wl-font-body:         'Crimson Text', 'Georgia', serif;
+    --wl-font-mono:         'Special Elite', serif;
+
+    /* Spacing */
+    --wl-space-xs:          4px;
+    --wl-space-sm:          8px;
+    --wl-space-md:          16px;
+    --wl-space-lg:          24px;
+    --wl-space-xl:          32px;
+
+    /* Transitions */
+    --wl-transition-fast:   0.15s ease;
+    --wl-transition:        0.25s ease;
+    --wl-transition-slow:   0.4s ease;
+
+    /* Radii */
+    --wl-radius:            3px;
+    --wl-radius-sm:         2px;
+}
+
+/* --------------------------------------------------------------------------
+   Reset & Base
+   -------------------------------------------------------------------------- */
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: transparent;
+    font-family: var(--wl-font-body);
+    font-size: 14px;
+    color: var(--wl-text-primary);
+    overflow: hidden;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* --------------------------------------------------------------------------
+   Custom Scrollbar (Thin Gold)
+   -------------------------------------------------------------------------- */
+::-webkit-scrollbar {
+    width: 5px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.20);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--wl-gold-dark);
+    border-radius: var(--wl-radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--wl-gold);
+}
+
+/* --------------------------------------------------------------------------
+   App Container
+   -------------------------------------------------------------------------- */
+.wl-app {
+    display: none;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 9999;
+}
+
+.wl-app.visible {
+    display: flex;
+}
+
+/* --------------------------------------------------------------------------
+   Panel
+   -------------------------------------------------------------------------- */
+.wl-panel {
+    width: 100%;
+    max-width: 900px;
+    max-height: 85vh;
+    background: var(--wl-bg-panel);
+    border: 1px solid var(--wl-border-strong);
+    border-radius: var(--wl-radius);
+    box-shadow: var(--wl-shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+    transition: opacity var(--wl-transition), transform var(--wl-transition);
+}
+
+.wl-app.visible .wl-panel {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+.wl-app.closing .wl-panel {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+}
+
+/* --------------------------------------------------------------------------
+   Header (Parchment with Torn Edge)
+   -------------------------------------------------------------------------- */
+.wl-header {
+    position: relative;
+    background:
+        linear-gradient(
+            135deg,
+            rgba(180, 156, 110, 0.18) 0%,
+            rgba(160, 136, 90, 0.10) 50%,
+            rgba(180, 156, 110, 0.15) 100%
+        ),
+        var(--wl-bg-dark);
+    padding: var(--wl-space-lg) var(--wl-space-xl);
+    text-align: center;
+    border-bottom: 1px solid var(--wl-border);
+}
+
+/* Torn parchment edge effect */
+.wl-header::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: var(--wl-bg-panel);
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 6'%3E%3Cpath d='M0,0 Q5,5 10,2 Q15,0 20,3 Q25,6 30,1 Q35,0 40,4 Q45,6 50,2 Q55,0 60,3 Q65,5 70,1 Q75,0 80,4 Q85,6 90,2 Q95,0 100,3 Q105,5 110,1 Q115,0 120,4 Q125,6 130,2 Q135,0 140,3 Q145,5 150,1 Q155,0 160,4 Q165,6 170,2 Q175,0 180,3 Q185,5 190,1 Q195,0 200,3 L200,6 L0,6 Z' fill='white'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 6'%3E%3Cpath d='M0,0 Q5,5 10,2 Q15,0 20,3 Q25,6 30,1 Q35,0 40,4 Q45,6 50,2 Q55,0 60,3 Q65,5 70,1 Q75,0 80,4 Q85,6 90,2 Q95,0 100,3 Q105,5 110,1 Q115,0 120,4 Q125,6 130,2 Q135,0 140,3 Q145,5 150,1 Q155,0 160,4 Q165,6 170,2 Q175,0 180,3 Q185,5 190,1 Q195,0 200,3 L200,6 L0,6 Z' fill='white'/%3E%3C/svg%3E");
+    mask-size: 200px 6px;
+    -webkit-mask-size: 200px 6px;
+    mask-repeat: repeat-x;
+    -webkit-mask-repeat: repeat-x;
+    z-index: 1;
+}
+
+.wl-header__title {
+    font-family: var(--wl-font-heading);
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 6px;
+    color: var(--wl-gold);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.50);
+    margin-bottom: var(--wl-space-xs);
+}
+
+.wl-header__subtitle {
+    font-family: var(--wl-font-script);
+    font-size: 18px;
+    color: var(--wl-parchment);
+    letter-spacing: 1px;
+}
+
+/* --------------------------------------------------------------------------
+   Tab Navigation
+   -------------------------------------------------------------------------- */
+.wl-tabs {
+    display: flex;
+    background: var(--wl-bg-dark);
+    border-bottom: 1px solid var(--wl-border);
+    padding: 0 var(--wl-space-sm);
+    flex-shrink: 0;
+}
+
+.wl-tabs__btn {
+    flex: 1;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: var(--wl-space-sm) var(--wl-space-md);
+    font-family: var(--wl-font-heading);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--wl-text-muted);
+    cursor: pointer;
+    transition: color var(--wl-transition-fast), border-color var(--wl-transition-fast), background var(--wl-transition-fast);
+    outline: none;
+}
+
+.wl-tabs__btn:hover {
+    color: var(--wl-text-secondary);
+    background: var(--wl-gold-subtle);
+}
+
+.wl-tabs__btn.active {
+    color: var(--wl-gold);
+    border-bottom-color: var(--wl-gold);
+}
+
+/* --------------------------------------------------------------------------
+   Content Area
+   -------------------------------------------------------------------------- */
+.wl-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--wl-space-lg);
+}
+
+.wl-content__panel {
+    display: none;
+    animation: wlFadeIn var(--wl-transition) ease;
+}
+
+.wl-content__panel.active {
+    display: block;
+}
+
+@keyframes wlFadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* --------------------------------------------------------------------------
+   Grid Layouts
+   -------------------------------------------------------------------------- */
+.wl-grid {
+    display: grid;
+    gap: var(--wl-space-md);
+}
+
+.wl-grid--stats {
+    grid-template-columns: repeat(3, 1fr);
+    margin-bottom: var(--wl-space-lg);
+}
+
+.wl-grid--animals {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.wl-grid--staff {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.wl-grid--storage {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.wl-grid--economy {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+/* --------------------------------------------------------------------------
+   Cards
+   -------------------------------------------------------------------------- */
+.wl-card {
+    background: var(--wl-bg-card);
+    border: 1px solid var(--wl-border);
+    border-radius: var(--wl-radius);
+    padding: var(--wl-space-md);
+    transition: background var(--wl-transition-fast), border-color var(--wl-transition-fast);
+}
+
+.wl-card:hover {
+    background: var(--wl-bg-card-hover);
+    border-color: var(--wl-border-strong);
+}
+
+.wl-card--empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: var(--wl-space-xl);
+    opacity: 0.6;
+}
+
+.wl-card__heading {
+    font-family: var(--wl-font-heading);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--wl-gold-light);
+    margin-bottom: var(--wl-space-sm);
+    letter-spacing: 0.5px;
+}
+
+.wl-card__text {
+    font-family: var(--wl-font-body);
+    font-size: 13px;
+    color: var(--wl-text-secondary);
+    line-height: 1.5;
+}
+
+/* Stat Cards (Overview) */
+.wl-card--stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: var(--wl-space-md) var(--wl-space-sm);
+    border-top: 2px solid var(--wl-gold-dark);
+}
+
+.wl-card__label {
+    font-family: var(--wl-font-heading);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--wl-text-muted);
+    margin-bottom: var(--wl-space-xs);
+}
+
+.wl-card__value {
+    font-family: var(--wl-font-heading);
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--wl-gold);
+}
+
+/* Info Cards */
+.wl-card--info {
+    margin-bottom: var(--wl-space-md);
+}
+
+/* --------------------------------------------------------------------------
+   Animal Cards
+   -------------------------------------------------------------------------- */
+.wl-card--animal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--wl-space-sm);
+}
+
+.wl-card--animal .wl-card__name {
+    font-family: var(--wl-font-heading);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--wl-text-bright);
+}
+
+.wl-card--animal .wl-card__breed {
+    font-family: var(--wl-font-mono);
+    font-size: 11px;
+    color: var(--wl-text-muted);
+    letter-spacing: 0.5px;
+}
+
+.wl-card--animal .wl-card__stats {
+    display: flex;
+    gap: var(--wl-space-sm);
+    flex-wrap: wrap;
+}
+
+.wl-card__stat-pip {
+    font-family: var(--wl-font-body);
+    font-size: 11px;
+    color: var(--wl-text-secondary);
+    background: rgba(0, 0, 0, 0.25);
+    padding: 2px var(--wl-space-sm);
+    border-radius: var(--wl-radius-sm);
+    border: 1px solid var(--wl-border);
+}
+
+.wl-card__health-bar {
+    width: 100%;
+    height: 4px;
+    background: rgba(0, 0, 0, 0.30);
+    border-radius: var(--wl-radius-sm);
+    overflow: hidden;
+    margin-top: var(--wl-space-xs);
+}
+
+.wl-card__health-fill {
+    height: 100%;
+    background: var(--wl-success);
+    transition: width var(--wl-transition);
+    border-radius: var(--wl-radius-sm);
+}
+
+/* --------------------------------------------------------------------------
+   Progress Bars (Production)
+   -------------------------------------------------------------------------- */
+.wl-progress {
+    width: 100%;
+    height: 8px;
+    background: rgba(0, 0, 0, 0.30);
+    border-radius: var(--wl-radius-sm);
+    overflow: hidden;
+    margin: var(--wl-space-sm) 0;
+}
+
+.wl-progress__bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--wl-gold-dark), var(--wl-gold));
+    border-radius: var(--wl-radius-sm);
+    transition: width var(--wl-transition-slow);
+}
+
+.wl-card--production {
+    margin-bottom: var(--wl-space-md);
+}
+
+.wl-card--production .wl-card__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.wl-card--production .wl-card__pct {
+    font-family: var(--wl-font-mono);
+    font-size: 12px;
+    color: var(--wl-gold);
+}
+
+/* --------------------------------------------------------------------------
+   Staff Role Badges
+   -------------------------------------------------------------------------- */
+.wl-card--staff {
+    display: flex;
+    flex-direction: column;
+    gap: var(--wl-space-xs);
+}
+
+.wl-card--staff .wl-card__name {
+    font-family: var(--wl-font-heading);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--wl-text-bright);
+}
+
+.wl-badge {
+    display: inline-block;
+    font-family: var(--wl-font-heading);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 2px var(--wl-space-sm);
+    border-radius: var(--wl-radius-sm);
+    border: 1px solid;
+    width: fit-content;
+}
+
+.wl-badge--foreman {
+    color: var(--wl-gold);
+    border-color: var(--wl-gold-dark);
+    background: rgba(201, 168, 76, 0.10);
+}
+
+.wl-badge--rancher {
+    color: var(--wl-success);
+    border-color: rgba(106, 158, 78, 0.40);
+    background: rgba(106, 158, 78, 0.10);
+}
+
+.wl-badge--farmhand {
+    color: var(--wl-info);
+    border-color: rgba(90, 142, 160, 0.40);
+    background: rgba(90, 142, 160, 0.10);
+}
+
+.wl-badge--veterinarian {
+    color: var(--wl-warning);
+    border-color: rgba(196, 154, 60, 0.40);
+    background: rgba(196, 154, 60, 0.10);
+}
+
+.wl-badge--default {
+    color: var(--wl-text-secondary);
+    border-color: var(--wl-border);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.wl-card--staff .wl-card__wage {
+    font-family: var(--wl-font-mono);
+    font-size: 11px;
+    color: var(--wl-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Storage Slots
+   -------------------------------------------------------------------------- */
+.wl-slot {
+    background: var(--wl-bg-card);
+    border: 1px solid var(--wl-border);
+    border-radius: var(--wl-radius);
+    padding: var(--wl-space-sm);
+    text-align: center;
+    min-height: 70px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    transition: background var(--wl-transition-fast), border-color var(--wl-transition-fast);
+}
+
+.wl-slot:hover {
+    background: var(--wl-bg-card-hover);
+    border-color: var(--wl-border-strong);
+}
+
+.wl-slot__name {
+    font-family: var(--wl-font-heading);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--wl-text-primary);
+    letter-spacing: 0.3px;
+}
+
+.wl-slot__qty {
+    font-family: var(--wl-font-mono);
+    font-size: 10px;
+    color: var(--wl-text-muted);
+}
+
+.wl-slot--empty {
+    opacity: 0.3;
+    border-style: dashed;
+}
+
+.wl-slot--empty .wl-slot__name {
+    color: var(--wl-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Economy Price Cards
+   -------------------------------------------------------------------------- */
+.wl-card--price {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--wl-space-xs);
+}
+
+.wl-card--price .wl-card__item {
+    font-family: var(--wl-font-heading);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--wl-text-bright);
+    letter-spacing: 0.5px;
+}
+
+.wl-card--price .wl-card__price {
+    font-family: var(--wl-font-heading);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--wl-gold);
+}
+
+.wl-card--price .wl-card__trend {
+    font-family: var(--wl-font-mono);
+    font-size: 10px;
+}
+
+.wl-card__trend--up {
+    color: var(--wl-success);
+}
+
+.wl-card__trend--down {
+    color: var(--wl-danger);
+}
+
+.wl-card__trend--stable {
+    color: var(--wl-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Lists
+   -------------------------------------------------------------------------- */
+.wl-list {
+    list-style: none;
+}
+
+.wl-list__item {
+    font-family: var(--wl-font-body);
+    font-size: 13px;
+    color: var(--wl-text-secondary);
+    padding: var(--wl-space-xs) 0;
+    border-bottom: 1px solid var(--wl-border);
+    line-height: 1.4;
+}
+
+.wl-list__item:last-child {
+    border-bottom: none;
+}
+
+.wl-list__item::before {
+    content: '\2014\00a0';
+    color: var(--wl-gold-dark);
+}
+
+/* --------------------------------------------------------------------------
+   Utility
+   -------------------------------------------------------------------------- */
+.wl-text-gold {
+    color: var(--wl-gold);
+}
+
+.wl-text-muted {
+    color: var(--wl-text-muted);
+}

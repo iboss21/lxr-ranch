@@ -1,3 +1,11 @@
+--[[ ═══════════════════════════════════════════════════════════════════════════
+     🐺 LXR-RANCH — The Land of Wolves
+     ═══════════════════════════════════════════════════════════════════════════
+     Developer   : iBoss21 | Brand : The Lux Empire
+     https://www.wolves.land | https://discord.gg/CrKcWdfd3A
+     ═══════════════════════════════════════════════════════════════════════════
+     © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+     ═══════════════════════════════════════════════════════════════════════════ ]]
 local RSGCore = exports['rsg-core']:GetCoreObject()
 lib.locale()
 
@@ -87,7 +95,7 @@ local function setupWaterPropTargets()
             FreezeEntityPosition(ped, false)
 
             -- Trigger server event to actually fill the bucket
-            TriggerServerEvent('rex-ranch:server:fillWaterBucket')
+            TriggerServerEvent('lxr-ranch:server:fillWaterBucket')
 
             fillWaterBucketActive = false
         end
@@ -104,3 +112,8 @@ CreateThread(function()
     Wait(500)
     setupWaterPropTargets()
 end)
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 🐺 wolves.land — The Land of Wolves
+-- © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+-- ═══════════════════════════════════════════════════════════════════════════════

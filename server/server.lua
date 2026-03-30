@@ -1,5 +1,217 @@
+--[[
+    ██╗     ██╗  ██╗██████╗       ██████╗  █████╗ ███╗   ██╗ ██████╗██╗  ██╗
+    ██║     ╚██╗██╔╝██╔══██╗      ██╔══██╗██╔══██╗████╗  ██║██╔════╝██║  ██║
+    ██║      ╚███╔╝ ██████╔╝█████╗██████╔╝███████║██╔██╗ ██║██║     ███████║
+    ██║      ██╔██╗ ██╔══██╗╚════╝██╔══██╗██╔══██║██║╚██╗██║██║     ██╔══██║
+    ███████╗██╔╝ ██╗██║  ██║      ██║  ██║██║  ██║██║ ╚████║╚██████╗██║  ██║
+    ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝      ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝
+
+    🐺 LXR Core - Ranch Simulation Server Logic
+
+    Server-side authority for the ranch simulation system. Handles animal
+    lifecycle, breeding, production, economy, taxation, staff management,
+    spawn control, and anti-abuse validation.
+
+    ═══════════════════════════════════════════════════════════════════════════════
+    SERVER INFORMATION
+    ═══════════════════════════════════════════════════════════════════════════════
+
+    Server:      The Land of Wolves 🐺
+    Developer:   iBoss21 / The Lux Empire
+    Website:     https://www.wolves.land
+    Discord:     https://discord.gg/CrKcWdfd3A
+
+    ═══════════════════════════════════════════════════════════════════════════════
+    CREDITS
+    ═══════════════════════════════════════════════════════════════════════════════
+
+    Script Author: iBoss21 / The Lux Empire for The Land of Wolves
+    © 2026 iBoss21 / The Lux Empire | wolves.land | All Rights Reserved
+]]
+
+-- ════════════════════════════════════════════════════════════════════════════════
+-- 🔒 RESOURCE NAME GUARD — DO NOT MODIFY
+-- ════════════════════════════════════════════════════════════════════════════════
+local EXPECTED_NAME = 'lxr-ranch'
+
+CreateThread(function()
+    local currentName = GetCurrentResourceName()
+    if currentName ~= EXPECTED_NAME then
+        print('^1[' .. EXPECTED_NAME .. '] FATAL: Resource name mismatch!')
+        print('^1[' .. EXPECTED_NAME .. '] Expected: ' .. EXPECTED_NAME)
+        print('^1[' .. EXPECTED_NAME .. '] Got: ' .. currentName)
+        print('^1[' .. EXPECTED_NAME .. '] This resource will not start.^0')
+        StopResource(currentName)
+        return
+    end
+end)
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- ████████████████████████ INITIALIZATION ████████████████████████████████████████
+-- ████████████████████████████████████████████████████████████████████████████████
+
 local RSGCore = exports['rsg-core']:GetCoreObject()
 lib.locale()
+local cronFailures = 0
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- ████████████████████████ ANTI-ABUSE SYSTEM █████████████████████████████████████
+-- ████████████████████████████████████████████████████████████████████████████████
+
+local Cooldowns = {}
+local ActionCounts = {}
+
+local function IsOnCooldown(source, action, cooldownMs)
+    local key = source .. ':' .. action
+    local now = GetGameTimer()
+    local limit = cooldownMs or (Config.Security and Config.Security.actionCooldown or 2000)
+    if Cooldowns[key] and (now - Cooldowns[key]) < limit then
+        return true
+    end
+    Cooldowns[key] = now
+    return false
+end
+
+local function IsRateLimited(source, action)
+    local maxActions = Config.Security and Config.Security.maxActionsPerMinute or 10
+    local key = source .. ':' .. action
+    local now = os.time()
+    if not ActionCounts[key] then
+        ActionCounts[key] = { count = 0, resetTime = now + 60 }
+    end
+    if now >= ActionCounts[key].resetTime then
+        ActionCounts[key] = { count = 0, resetTime = now + 60 }
+    end
+    ActionCounts[key].count = ActionCounts[key].count + 1
+    if ActionCounts[key].count > maxActions then
+        if Config.Security and Config.Security.logSuspiciousActivity then
+            print('^1[LXR-RANCH SECURITY]^7 Rate limit exceeded: Player ' .. source .. ' action: ' .. action)
+        end
+        return true
+    end
+    return false
+end
+
+CreateThread(function()
+    while true do
+        Wait(300000)
+        local now = GetGameTimer()
+        for key, timestamp in pairs(Cooldowns) do
+            if (now - timestamp) > 300000 then Cooldowns[key] = nil end
+        end
+        local nowSec = os.time()
+        for key, data in pairs(ActionCounts) do
+            if nowSec >= data.resetTime + 120 then ActionCounts[key] = nil end
+        end
+    end
+end)
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- ████████████████████████ CONDITION SCORE SYSTEM ████████████████████████████████
+-- ████████████████████████████████████████████████████████████████████████████████
+
+local function CalculateConditionScore(animals)
+    if not animals or #animals == 0 then return 50 end
+    local totalFood, totalWater, totalHealth, totalClean = 0, 0, 0, 0
+    for _, animal in ipairs(animals) do
+        totalFood = totalFood + (animal.hunger or 50)
+        totalWater = totalWater + (animal.thirst or 50)
+        totalHealth = totalHealth + (animal.health or 50)
+        totalClean = totalClean + (animal.cleanliness or 50)
+    end
+    local count = #animals
+    return math.floor((totalFood / count + totalWater / count + totalHealth / count + totalClean / count) / 4)
+end
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- ████████████████████████ TAXATION ENGINE ████████████████████████████████████████
+-- ████████████████████████████████████████████████████████████████████████████████
+
+CreateThread(function()
+    Wait(30000) -- Wait for server to stabilize
+    if not Config.Taxation or not Config.Taxation.enabled then return end
+
+    while true do
+        Wait(Config.Taxation and Config.Taxation.checkInterval or 3600000)
+
+        local ranches = MySQL.query.await('SELECT * FROM lxr_ranches WHERE tax_status != ?', {'liquidated'})
+        if not ranches then goto continueTax end
+
+        local currentTime = os.time()
+        for _, ranch in ipairs(ranches) do
+            local taxDue = ranch.tax_due_date or 0
+            if currentTime >= taxDue and taxDue > 0 then
+                local tier = ranch.tier or 1
+                local baseTax = Config.Taxation and Config.Taxation.baseTax or 50
+                local tierMultiplier = Config.Taxation and Config.Taxation.tierMultiplier or 25
+                local taxAmount = baseTax + (tier * tierMultiplier)
+
+                local daysPastDue = math.floor((currentTime - taxDue) / 86400)
+
+                if daysPastDue >= (Config.Taxation and Config.Taxation.liquidationDays or 14) then
+                    MySQL.update('UPDATE lxr_ranches SET tax_status = ?, tier = 1 WHERE ranchid = ?', {'liquidated', ranch.ranchid})
+                    print('^1[LXR-RANCH TAX]^7 Ranch ' .. ranch.ranchid .. ' LIQUIDATED for non-payment')
+                elseif daysPastDue >= (Config.Taxation and Config.Taxation.lockDays or 7) then
+                    MySQL.update('UPDATE lxr_ranches SET tax_status = ? WHERE ranchid = ?', {'locked', ranch.ranchid})
+                    print('^3[LXR-RANCH TAX]^7 Ranch ' .. ranch.ranchid .. ' LOCKED for overdue tax')
+                elseif daysPastDue >= (Config.Taxation and Config.Taxation.warningDays or 3) then
+                    MySQL.update('UPDATE lxr_ranches SET tax_status = ? WHERE ranchid = ?', {'warning', ranch.ranchid})
+                end
+
+                MySQL.insert('INSERT INTO lxr_ranch_tax_records (ranchid, cycle_start, cycle_end, amount_due, status) VALUES (?, ?, ?, ?, ?)', {
+                    ranch.ranchid, taxDue - (Config.Taxation and Config.Taxation.cycleDays or 7) * 86400, taxDue, taxAmount, 'overdue'
+                })
+            end
+        end
+
+        ::continueTax::
+    end
+end)
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- ████████████████████████ DYNAMIC ECONOMY ENGINE ████████████████████████████████
+-- ████████████████████████████████████████████████████████████████████████████████
+
+local MarketPrices = {}
+
+CreateThread(function()
+    Wait(15000)
+    if not Config.Economy or not Config.Economy.dynamicPricing then return end
+
+    while true do
+        Wait(Config.Economy and Config.Economy.priceUpdateInterval or 1800000)
+
+        local counts = MySQL.query.await('SELECT model, COUNT(*) as total FROM lxr_ranch_animals GROUP BY model')
+        if not counts then goto continueEcon end
+
+        local totalAnimals = 0
+        for _, row in ipairs(counts) do totalAnimals = totalAnimals + row.total end
+
+        for _, row in ipairs(counts) do
+            local basePrice = Config.Economy and Config.Economy.baseSellPrices and Config.Economy.baseSellPrices[row.model] or 100
+            local supplyFactor = 1.0
+            if totalAnimals > 0 then
+                local ratio = row.total / totalAnimals
+                supplyFactor = math.max(0.5, math.min(2.0, 1.0 - (ratio - 0.2) * 2))
+            end
+            MarketPrices[row.model] = math.floor(basePrice * supplyFactor)
+        end
+
+        if Config.Debug then
+            print('^2[LXR-RANCH ECONOMY]^7 Updated market prices for ' .. #counts .. ' species')
+        end
+
+        ::continueEcon::
+    end
+end)
+
+function GetMarketPrice(model)
+    return MarketPrices[model] or (Config.Economy and Config.Economy.baseSellPrices and Config.Economy.baseSellPrices[model]) or 100
+end
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- ████████████████████████ RANCH STAFF HELPER ████████████████████████████████████
+-- ████████████████████████████████████████████████████████████████████████████████
 
 ---------------------------------------------
 -- helper function to check if player is ranch staff
@@ -286,7 +498,7 @@ SpawnController:Initialize()
 ---------------------------------------------
 -- ranch storage
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:ranchstorage', function(data)
+RegisterNetEvent('lxr-ranch:server:ranchstorage', function(data)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player then return end
@@ -371,7 +583,7 @@ local function CreateAnimalId()
         animalid = math.random(Config.ANIMAL_ID_MIN, Config.ANIMAL_ID_MAX)
         
         local success, result = pcall(function()
-            return MySQL.query.await("SELECT COUNT(*) as count FROM rex_ranch_animals WHERE animalid = ?", { animalid })
+            return MySQL.query.await("SELECT COUNT(*) as count FROM lxr_ranch_animals WHERE animalid = ?", { animalid })
         end)
         
         if success and result and result[1] and result[1].count == 0 then
@@ -406,26 +618,26 @@ end
 ---------------------------------------------
 
 -- Handle spawn requests from clients
-RegisterNetEvent('rex-ranch:server:requestAnimalSpawn', function(animalId, animalData)
+RegisterNetEvent('lxr-ranch:server:requestAnimalSpawn', function(animalId, animalData)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
     -- Allow everyone to spawn/see animals, but interactions are still restricted client-side
     if not Player then
-        TriggerClientEvent('rex-ranch:client:spawnAnimalDenied', src, animalId, 'Player not found')
+        TriggerClientEvent('lxr-ranch:client:spawnAnimalDenied', src, animalId, 'Player not found')
         return
     end
     
     -- Check if spawn is allowed
     local canSpawn, reason = SpawnController:CanPlayerSpawn(src, animalId)
     if not canSpawn then
-        TriggerClientEvent('rex-ranch:client:spawnAnimalDenied', src, animalId, reason)
+        TriggerClientEvent('lxr-ranch:client:spawnAnimalDenied', src, animalId, reason)
         return
     end
     
     -- Register the spawn and grant permission
     SpawnController:RegisterSpawn(src, animalId, animalData)
-    TriggerClientEvent('rex-ranch:client:spawnAnimalGranted', src, animalId, animalData)
+    TriggerClientEvent('lxr-ranch:client:spawnAnimalGranted', src, animalId, animalData)
     
     if Config.Debug then
         print('^2[SPAWN CONTROLLER]^7 Granted spawn permission for animal ' .. animalId .. ' to player ' .. src)
@@ -435,7 +647,7 @@ end)
 ---------------------------------------------
 -- count amount of animals the ranch owns
 ---------------------------------------------
-RSGCore.Functions.CreateCallback('rex-ranch:server:countanimals', function(src, cb, ranchid)
+RSGCore.Functions.CreateCallback('lxr-ranch:server:countanimals', function(src, cb, ranchid)
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player or not ranchid then 
         cb(0)
@@ -443,7 +655,7 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:countanimals', function(src, 
     end
     
     local success, result = pcall(function()
-        return MySQL.query.await("SELECT COUNT(*) as count FROM rex_ranch_animals WHERE ranchid = ?", { ranchid })
+        return MySQL.query.await("SELECT COUNT(*) as count FROM lxr_ranch_animals WHERE ranchid = ?", { ranchid })
     end)
     
         if success and result and result[1] then
@@ -459,10 +671,10 @@ end)
 ---------------------------------------------
 -- send animals to client side from database
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:refreshAnimals', function()
+RegisterNetEvent('lxr-ranch:server:refreshAnimals', function()
     local src = source -- Get the requesting client
     local success, error = pcall(function()
-        MySQL.query('SELECT * FROM `rex_ranch_animals`', {}, function(animals, error)
+        MySQL.query('SELECT * FROM `lxr_ranch_animals`', {}, function(animals, error)
             if error then
                 print('^1[ERROR]^7 Database query failed in refreshAnimals: ' .. tostring(error))
                 return
@@ -479,7 +691,7 @@ RegisterNetEvent('rex-ranch:server:refreshAnimals', function()
                 end
                 
                 -- Send only to the requesting client, not all clients (-1)
-                TriggerClientEvent('rex-ranch:client:spawnAnimals', src, animals)
+                TriggerClientEvent('lxr-ranch:client:spawnAnimals', src, animals)
                 if Config.Debug then
                     print('^2[DEBUG]^7 Successfully sent ' .. #animals .. ' animals entries to client ' .. src)
                 end
@@ -501,12 +713,12 @@ end)
 ---------------------------------------------
 -- save animal position to database
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:saveAnimalPosition', function(animalid, pos_x, pos_y, pos_z, pos_w)
+RegisterNetEvent('lxr-ranch:server:saveAnimalPosition', function(animalid, pos_x, pos_y, pos_z, pos_w)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player or not animalid then return end
     -- update the animal's position in the database
-    MySQL.update.await('UPDATE rex_ranch_animals SET pos_x = ?, pos_y = ?, pos_z = ?, pos_w = ? WHERE animalid = ?', {
+    MySQL.update.await('UPDATE lxr_ranch_animals SET pos_x = ?, pos_y = ?, pos_z = ?, pos_w = ? WHERE animalid = ?', {
         pos_x,
         pos_y,
         pos_z,
@@ -514,7 +726,7 @@ RegisterNetEvent('rex-ranch:server:saveAnimalPosition', function(animalid, pos_x
         animalid
     })
     -- Update only the specific client with position change
-    TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', src, animalid, {pos_x = pos_x, pos_y = pos_y, pos_z = pos_z, pos_w = pos_w})
+    TriggerClientEvent('lxr-ranch:client:refreshSingleAnimal', src, animalid, {pos_x = pos_x, pos_y = pos_y, pos_z = pos_z, pos_w = pos_w})
 end)
 
 ---------------------------------------------
@@ -523,7 +735,7 @@ end)
 AddEventHandler('onResourceStart', function(resourceName)
     if GetCurrentResourceName() == resourceName then
         Wait(5000)
-        MySQL.query('SELECT * FROM `rex_ranch_animals`', {}, function(animals)
+        MySQL.query('SELECT * FROM `lxr_ranch_animals`', {}, function(animals)
             if animals then
                 -- Debug: Check pregnancy status in restart data
                 for i, animal in ipairs(animals) do
@@ -532,8 +744,8 @@ AddEventHandler('onResourceStart', function(resourceName)
                     end
                 end
                 
-                TriggerClientEvent('rex-ranch:client:spawnAnimals', -1, animals)
-                print('^2[REX-RANCH]^7 Sent ' .. #animals .. ' animals entries to clients.')
+                TriggerClientEvent('lxr-ranch:client:spawnAnimals', -1, animals)
+                print('^2[LXR-RANCH]^7 Sent ' .. #animals .. ' animals entries to clients.')
             end
         end)
     end
@@ -542,7 +754,7 @@ end)
 ---------------------------------------------
 -- Handle client reporting animal despawn
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:reportDespawn', function(animalId)
+RegisterNetEvent('lxr-ranch:server:reportDespawn', function(animalId)
     local src = source
     
     if SpawnController.activeSpawns[animalId] then
@@ -584,7 +796,7 @@ end)
 ---------------------------------------------
 -- feed animal system
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:feedAnimal', function(data)
+RegisterNetEvent('lxr-ranch:server:feedAnimal', function(data)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
@@ -614,7 +826,7 @@ RegisterNetEvent('rex-ranch:server:feedAnimal', function(data)
     end
     
     -- First verify animal exists and get current stats for debugging
-    local animalData = MySQL.query.await('SELECT animalid, hunger, health, thirst FROM rex_ranch_animals WHERE animalid = ?', {animalid})
+    local animalData = MySQL.query.await('SELECT animalid, hunger, health, thirst FROM lxr_ranch_animals WHERE animalid = ?', {animalid})
     if not animalData or #animalData == 0 then
         TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Animal not found!'})
         if Config.Debug then
@@ -637,7 +849,7 @@ RegisterNetEvent('rex-ranch:server:feedAnimal', function(data)
     
     -- Update animal hunger and health
     local updateSuccess, updateError = pcall(function()
-        return MySQL.update.await('UPDATE rex_ranch_animals SET hunger = 100, health = ? WHERE animalid = ?', {newHealth, animalid})
+        return MySQL.update.await('UPDATE lxr_ranch_animals SET hunger = 100, health = ? WHERE animalid = ?', {newHealth, animalid})
     end)
     
     if updateSuccess and updateError and updateError > 0 then
@@ -653,7 +865,7 @@ RegisterNetEvent('rex-ranch:server:feedAnimal', function(data)
         TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = notifyMsg})
         
         -- Send immediate update to client (no need for full refresh)
-        TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', src, animalid, {hunger = 100, health = newHealth})
+        TriggerClientEvent('lxr-ranch:client:refreshSingleAnimal', src, animalid, {hunger = 100, health = newHealth})
         
         if Config.Debug then
             print('^2[DEBUG]^7 Player ' .. src .. ' successfully fed animal ' .. animalid .. ' (updated ' .. updateError .. ' rows)')
@@ -669,7 +881,7 @@ end)
 ---------------------------------------------
 -- water animal system
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
+RegisterNetEvent('lxr-ranch:server:waterAnimal', function(data)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
@@ -707,7 +919,7 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
     end
     
     -- First verify animal exists and get current stats for debugging
-    local animalData = MySQL.query.await('SELECT animalid, thirst, health, hunger FROM rex_ranch_animals WHERE animalid = ?', {animalid})
+    local animalData = MySQL.query.await('SELECT animalid, thirst, health, hunger FROM lxr_ranch_animals WHERE animalid = ?', {animalid})
     if not animalData or #animalData == 0 then
         TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Animal not found!'})
         if Config.Debug then
@@ -730,7 +942,7 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
     
     -- Update animal thirst and health
     local updateSuccess, updateError = pcall(function()
-        return MySQL.update.await('UPDATE rex_ranch_animals SET thirst = 100, health = ? WHERE animalid = ?', {newHealth, animalid})
+        return MySQL.update.await('UPDATE lxr_ranch_animals SET thirst = 100, health = ? WHERE animalid = ?', {newHealth, animalid})
     end)
     
     if updateSuccess and updateError and updateError > 0 then
@@ -749,7 +961,7 @@ RegisterNetEvent('rex-ranch:server:waterAnimal', function(data)
         TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = notifyMsg})
         
         -- Send immediate update to client (no need for full refresh)
-        TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', src, animalid, {thirst = 100, health = newHealth})
+        TriggerClientEvent('lxr-ranch:client:refreshSingleAnimal', src, animalid, {thirst = 100, health = newHealth})
         
         if Config.Debug then
             print('^2[DEBUG]^7 Player ' .. src .. ' successfully watered animal ' .. animalid .. ' (updated ' .. updateError .. ' rows)')
@@ -765,7 +977,7 @@ end)
 ---------------------------------------------
 -- fill water bucket system
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:fillWaterBucket', function()
+RegisterNetEvent('lxr-ranch:server:fillWaterBucket', function()
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
@@ -795,7 +1007,7 @@ end)
 ---------------------------------------------
 -- collect animal product system
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:collectProduct', function(data)
+RegisterNetEvent('lxr-ranch:server:collectProduct', function(data)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
@@ -824,7 +1036,7 @@ RegisterNetEvent('rex-ranch:server:collectProduct', function(data)
     
     -- Get animal data with comprehensive error handling
     local success, errorMsg = pcall(function()
-        MySQL.query('SELECT model, product_ready, health, hunger, thirst FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(result)
+        MySQL.query('SELECT model, product_ready, health, hunger, thirst FROM lxr_ranch_animals WHERE animalid = ?', {animalid}, function(result)
             if not result or #result == 0 then
                 TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Animal not found!'})
                 if Config.Debug then
@@ -870,14 +1082,14 @@ RegisterNetEvent('rex-ranch:server:collectProduct', function(data)
             
             -- Reset product ready status with proper error handling
             local resetSuccess, resetError = pcall(function()
-                return MySQL.update.await('UPDATE rex_ranch_animals SET product_ready = 0 WHERE animalid = ?', {animalid})
+                return MySQL.update.await('UPDATE lxr_ranch_animals SET product_ready = 0 WHERE animalid = ?', {animalid})
             end)
             
             if resetSuccess and resetError and resetError > 0 then
                 TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Collected ' .. productConfig.amount .. ' ' .. productConfig.product .. '!'})
                 
                 -- Update client cache immediately (no need for full refresh)
-                TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', src, animalid, {product_ready = 0})
+                TriggerClientEvent('lxr-ranch:client:refreshSingleAnimal', src, animalid, {product_ready = 0})
                 
                 if Config.Debug then
                     print('^2[COLLECT SUCCESS]^7 Player ' .. src .. ' successfully collected ' .. productConfig.amount .. 'x ' .. productConfig.product .. ' from animal ' .. animalid)
@@ -906,7 +1118,7 @@ end)
 ---------------------------------------------
 -- animal production status callback
 ---------------------------------------------
-RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalProductionStatus', function(src, cb, animalid)
+RSGCore.Functions.CreateCallback('lxr-ranch:server:getAnimalProductionStatus', function(src, cb, animalid)
     local Player = RSGCore.Functions.GetPlayer(src)
     
     if Config.Debug then
@@ -921,7 +1133,7 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalProductionStatus', f
         return 
     end
     
-    MySQL.query('SELECT model, product_ready, health, hunger, thirst, last_production, age, born FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(result)
+    MySQL.query('SELECT model, product_ready, health, hunger, thirst, last_production, age, born FROM lxr_ranch_animals WHERE animalid = ?', {animalid}, function(result)
         if Config.Debug then
             print('^3[PRODUCTION DEBUG]^7 Database query result for animal ' .. animalid .. ': ' .. (result and #result or 'nil/0') .. ' rows')
         end
@@ -1004,7 +1216,7 @@ end)
 ---------------------------------------------
 -- Animal Overview Callback
 ---------------------------------------------
-RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalOverview', function(src, cb, ranchid)
+RSGCore.Functions.CreateCallback('lxr-ranch:server:getAnimalOverview', function(src, cb, ranchid)
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player then 
         cb({animals = {}, summary = {}})
@@ -1013,7 +1225,7 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalOverview', function(
     
     if not ranchid then
         -- Get all animals if no specific ranch
-        MySQL.query('SELECT * FROM rex_ranch_animals ORDER BY ranchid, model', {}, function(result)
+        MySQL.query('SELECT * FROM lxr_ranch_animals ORDER BY ranchid, model', {}, function(result)
             if not result then
                 cb({animals = {}, summary = {}})
                 return
@@ -1024,7 +1236,7 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getAnimalOverview', function(
         end)
     else
         -- Get animals for specific ranch
-        MySQL.query('SELECT * FROM rex_ranch_animals WHERE ranchid = ? ORDER BY model', {ranchid}, function(result)
+        MySQL.query('SELECT * FROM lxr_ranch_animals WHERE ranchid = ? ORDER BY model', {ranchid}, function(result)
             if not result then
                 cb({animals = {}, summary = {}})
                 return
@@ -1149,14 +1361,14 @@ end
 ---------------------------------------------
 
 -- Get detailed breeding status including cooldowns
-RSGCore.Functions.CreateCallback('rex-ranch:server:getBreedingStatus', function(src, cb, animalid)
+RSGCore.Functions.CreateCallback('lxr-ranch:server:getBreedingStatus', function(src, cb, animalid)
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player or not animalid then 
         cb({status = 'error', message = 'Invalid request'})
         return 
     end
     
-    MySQL.query('SELECT model, gender, age, pregnant, breeding_ready_time, health, hunger, thirst, born FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(result)
+    MySQL.query('SELECT model, gender, age, pregnant, breeding_ready_time, health, hunger, thirst, born FROM lxr_ranch_animals WHERE animalid = ?', {animalid}, function(result)
         if not result or #result == 0 then
             cb({status = 'error', message = 'Animal not found'})
             return
@@ -1224,12 +1436,12 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getBreedingStatus', function(
         -- Check if male and there are already pregnant females in the ranch (if enabled)
         if animal.gender == 'male' and Config.RestrictMaleBreedingWhenFemalesPregnant then
             -- Get ranch ID from the animal
-            MySQL.query('SELECT ranchid FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(ranchResult)
+            MySQL.query('SELECT ranchid FROM lxr_ranch_animals WHERE animalid = ?', {animalid}, function(ranchResult)
                 if ranchResult and #ranchResult > 0 then
                     local ranchid = ranchResult[1].ranchid
                     
                     -- Check for pregnant females in the same ranch
-                    MySQL.query('SELECT COUNT(*) as pregnant_count FROM rex_ranch_animals WHERE ranchid = ? AND gender = ? AND pregnant = 1', 
+                    MySQL.query('SELECT COUNT(*) as pregnant_count FROM lxr_ranch_animals WHERE ranchid = ? AND gender = ? AND pregnant = 1', 
                                 {ranchid, 'female'}, function(pregnantResult)
                         if pregnantResult and #pregnantResult > 0 and pregnantResult[1].pregnant_count > 0 then
                             cb({
@@ -1259,14 +1471,14 @@ end)
 ---------------------------------------------
 -- Get pregnancy progress
 ---------------------------------------------
-RSGCore.Functions.CreateCallback('rex-ranch:server:getPregnancyProgress', function(src, cb, animalid)
+RSGCore.Functions.CreateCallback('lxr-ranch:server:getPregnancyProgress', function(src, cb, animalid)
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player or not animalid or not isPlayerRanchStaff(Player) then 
         cb({isPregnant = false})
         return 
     end
     
-    MySQL.query('SELECT pregnant, gestation_end_time, born, model FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(result)
+    MySQL.query('SELECT pregnant, gestation_end_time, born, model FROM lxr_ranch_animals WHERE animalid = ?', {animalid}, function(result)
         if not result or #result == 0 then
             cb({isPregnant = false})
             return
@@ -1330,7 +1542,7 @@ end)
 ---------------------------------------------
 -- Get available animals for breeding
 ---------------------------------------------
-RSGCore.Functions.CreateCallback('rex-ranch:server:getAvailableAnimalsForBreeding', function(src, cb, ranchid, animalid)
+RSGCore.Functions.CreateCallback('lxr-ranch:server:getAvailableAnimalsForBreeding', function(src, cb, ranchid, animalid)
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player or not ranchid or not animalid or not isPlayerRanchStaff(Player) then 
         cb(false)
@@ -1338,7 +1550,7 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getAvailableAnimalsForBreedin
     end
     
     -- Get the animal we want to breed
-    MySQL.query('SELECT model, gender, age FROM rex_ranch_animals WHERE animalid = ? AND ranchid = ?', {animalid, ranchid}, function(mainResult)
+    MySQL.query('SELECT model, gender, age FROM lxr_ranch_animals WHERE animalid = ? AND ranchid = ?', {animalid, ranchid}, function(mainResult)
         if not mainResult or #mainResult == 0 then
             cb(false)
             return
@@ -1349,7 +1561,7 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getAvailableAnimalsForBreedin
         
         -- Check if the main animal is male and there are already pregnant females (if enabled)
         if mainAnimal.gender == 'male' and Config.RestrictMaleBreedingWhenFemalesPregnant then
-            MySQL.query('SELECT COUNT(*) as pregnant_count FROM rex_ranch_animals WHERE ranchid = ? AND gender = ? AND pregnant = 1', 
+            MySQL.query('SELECT COUNT(*) as pregnant_count FROM lxr_ranch_animals WHERE ranchid = ? AND gender = ? AND pregnant = 1', 
                         {ranchid, 'female'}, function(pregnantCheck)
                 if pregnantCheck and #pregnantCheck > 0 and pregnantCheck[1].pregnant_count > 0 then
                     -- Return empty list - male cannot breed when females are already pregnant
@@ -1367,7 +1579,7 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getAvailableAnimalsForBreedin
         
         function findBreedingPartners()
             -- Find compatible animals of opposite gender
-            MySQL.query('SELECT animalid, model, gender, age, health, hunger, thirst, pregnant, breeding_ready_time, pos_x, pos_y, pos_z FROM rex_ranch_animals WHERE ranchid = ? AND gender = ? AND animalid != ?', 
+            MySQL.query('SELECT animalid, model, gender, age, health, hunger, thirst, pregnant, breeding_ready_time, pos_x, pos_y, pos_z FROM lxr_ranch_animals WHERE ranchid = ? AND gender = ? AND animalid != ?', 
                         {ranchid, targetGender, animalid}, function(result)
                 if not result or #result == 0 then
                     cb({})
@@ -1444,7 +1656,7 @@ end)
 ---------------------------------------------
 -- get nearby animals for sale
 ---------------------------------------------
-RSGCore.Functions.CreateCallback('rex-ranch:server:getNearbyAnimalsForSale', function(src, cb, ranchid, salePointCoords)
+RSGCore.Functions.CreateCallback('lxr-ranch:server:getNearbyAnimalsForSale', function(src, cb, ranchid, salePointCoords)
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player or not ranchid then 
         cb({})
@@ -1454,7 +1666,7 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getNearbyAnimalsForSale', fun
     -- Get all animals from this ranch that are old enough to sell
     local success, result = pcall(function()
         return MySQL.query.await(
-            'SELECT animalid, model, gender, age, health, hunger, thirst, pos_x, pos_y, pos_z FROM rex_ranch_animals WHERE ranchid = ? AND age >= ?',
+            'SELECT animalid, model, gender, age, health, hunger, thirst, pos_x, pos_y, pos_z FROM lxr_ranch_animals WHERE ranchid = ? AND age >= ?',
             { ranchid, Config.MinAgeToSell }
         )
     end)
@@ -1516,7 +1728,7 @@ end)
 ---------------------------------------------
 -- sell single animal
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:sellAnimal', function(animalid, salePrice, salePointCoords)
+RegisterNetEvent('lxr-ranch:server:sellAnimal', function(animalid, salePrice, salePointCoords)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
@@ -1537,7 +1749,7 @@ RegisterNetEvent('rex-ranch:server:sellAnimal', function(animalid, salePrice, sa
     end
     
     -- Get animal data from database
-    local animalResult = MySQL.query.await('SELECT animalid, ranchid, age, model FROM rex_ranch_animals WHERE animalid = ?', {animalid})
+    local animalResult = MySQL.query.await('SELECT animalid, ranchid, age, model FROM lxr_ranch_animals WHERE animalid = ?', {animalid})
     
     if not animalResult or #animalResult == 0 then
         TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Animal not found!'})
@@ -1565,7 +1777,7 @@ RegisterNetEvent('rex-ranch:server:sellAnimal', function(animalid, salePrice, sa
     
     -- Delete animal from database
     local deleteSuccess, deleteError = pcall(function()
-        return MySQL.update.await('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animalid})
+        return MySQL.update.await('DELETE FROM lxr_ranch_animals WHERE animalid = ?', {animalid})
     end)
     
     if not deleteSuccess or not deleteError or deleteError == 0 then
@@ -1586,8 +1798,8 @@ RegisterNetEvent('rex-ranch:server:sellAnimal', function(animalid, salePrice, sa
     })
     
     -- Remove from clients and refresh
-    TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animalid)
-    TriggerEvent('rex-ranch:server:refreshAnimals')
+    TriggerClientEvent('lxr-ranch:client:removeAnimal', -1, animalid)
+    TriggerEvent('lxr-ranch:server:refreshAnimals')
     
     if Config.Debug then
         print('^2[SELL ANIMAL SUCCESS]^7 Player ' .. src .. ' sold animal ' .. animalid .. ' for $' .. salePrice)
@@ -1597,7 +1809,7 @@ end)
 ---------------------------------------------
 -- sell all animals
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:sellAllAnimals', function(animals, salePointCoords)
+RegisterNetEvent('lxr-ranch:server:sellAllAnimals', function(animals, salePointCoords)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
@@ -1625,7 +1837,7 @@ RegisterNetEvent('rex-ranch:server:sellAllAnimals', function(animals, salePointC
     for _, animal in ipairs(animals) do
         if animal.animalid and animal.salePrice then
             -- Get animal data from database to verify
-            local animalResult = MySQL.query.await('SELECT animalid, age FROM rex_ranch_animals WHERE animalid = ?', {animal.animalid})
+            local animalResult = MySQL.query.await('SELECT animalid, age FROM lxr_ranch_animals WHERE animalid = ?', {animal.animalid})
             
             if animalResult and #animalResult > 0 then
                 local dbAnimal = animalResult[1]
@@ -1634,13 +1846,13 @@ RegisterNetEvent('rex-ranch:server:sellAllAnimals', function(animals, salePointC
                 if dbAnimal.age >= Config.MinAgeToSell then
                     -- Delete animal
                     local deleteSuccess, deleteError = pcall(function()
-                        return MySQL.update.await('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animal.animalid})
+                        return MySQL.update.await('DELETE FROM lxr_ranch_animals WHERE animalid = ?', {animal.animalid})
                     end)
                     
                     if deleteSuccess and deleteError and deleteError > 0 then
                         totalValue = totalValue + animal.salePrice
                         successCount = successCount + 1
-                        TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animal.animalid)
+                        TriggerClientEvent('lxr-ranch:client:removeAnimal', -1, animal.animalid)
                     else
                         table.insert(failedAnimals, animal.animalid)
                     end
@@ -1677,7 +1889,7 @@ RegisterNetEvent('rex-ranch:server:sellAllAnimals', function(animals, salePointC
     end
     
     -- Refresh all clients
-    TriggerEvent('rex-ranch:server:refreshAnimals')
+    TriggerEvent('lxr-ranch:server:refreshAnimals')
     
     if Config.Debug then
         print('^2[SELL ANIMALS SUCCESS]^7 Player ' .. src .. ' sold ' .. successCount .. ' animals for $' .. totalValue)
@@ -1690,7 +1902,7 @@ end)
 ---------------------------------------------
 -- buy animal system
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:buyAnimal', function(purchaseData)
+RegisterNetEvent('lxr-ranch:server:buyAnimal', function(purchaseData)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
@@ -1726,7 +1938,7 @@ RegisterNetEvent('rex-ranch:server:buyAnimal', function(purchaseData)
     end
     
     -- Check animal count for the ranch
-    local countResult = MySQL.query.await('SELECT COUNT(*) as count FROM rex_ranch_animals WHERE ranchid = ?', {purchaseData.ranchid})
+    local countResult = MySQL.query.await('SELECT COUNT(*) as count FROM lxr_ranch_animals WHERE ranchid = ?', {purchaseData.ranchid})
     if not countResult or not countResult[1] then
         TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Error checking ranch capacity!'})
         if Config.Debug then
@@ -1769,7 +1981,7 @@ RegisterNetEvent('rex-ranch:server:buyAnimal', function(purchaseData)
     
     -- Insert animal into database
     local success, error = pcall(function()
-        return MySQL.insert.await('INSERT INTO rex_ranch_animals (animalid, ranchid, model, gender, age, health, hunger, thirst, pos_x, pos_y, pos_z, pos_w, pregnant, born) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
+        return MySQL.insert.await('INSERT INTO lxr_ranch_animals (animalid, ranchid, model, gender, age, health, hunger, thirst, pos_x, pos_y, pos_z, pos_w, pregnant, born) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
             animalid,
             purchaseData.ranchid,
             purchaseData.animalType,
@@ -1813,11 +2025,11 @@ RegisterNetEvent('rex-ranch:server:buyAnimal', function(purchaseData)
     
     -- Refresh animals for the purchasing player first to trigger immediate spawn
     -- Query the newly created animal
-    MySQL.query('SELECT * FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(newAnimalData)
+    MySQL.query('SELECT * FROM lxr_ranch_animals WHERE animalid = ?', {animalid}, function(newAnimalData)
         if newAnimalData and #newAnimalData > 0 then
             -- Send the new animal data to the purchasing player
             local animalDataArray = {newAnimalData[1]}
-            TriggerClientEvent('rex-ranch:client:spawnAnimals', src, animalDataArray)
+            TriggerClientEvent('lxr-ranch:client:spawnAnimals', src, animalDataArray)
             
             if Config.Debug then
                 print('^2[BUY ANIMAL SUCCESS]^7 Sent new animal ' .. animalid .. ' to player ' .. src .. ' for immediate spawn')
@@ -1827,7 +2039,7 @@ RegisterNetEvent('rex-ranch:server:buyAnimal', function(purchaseData)
     
     -- Also refresh all clients to update their animal lists
     Wait(500)  -- Small delay to ensure the purchasing player processes first
-    TriggerEvent('rex-ranch:server:refreshAnimals')
+    TriggerEvent('lxr-ranch:server:refreshAnimals')
     
     if Config.Debug then
         print('^2[BUY ANIMAL SUCCESS]^7 Player ' .. src .. ' purchased ' .. purchaseData.animalName .. ' (ID: ' .. animalid .. ') for $' .. purchaseData.price)
@@ -1845,7 +2057,7 @@ local function StartBreeding(animal1id, animal2id, isAutomatic)
     end
     
     -- Get both animals' data
-    MySQL.query('SELECT animalid, model, gender, age, pregnant, breeding_ready_time, health, hunger, thirst, ranchid FROM rex_ranch_animals WHERE animalid IN (?, ?)', 
+    MySQL.query('SELECT animalid, model, gender, age, pregnant, breeding_ready_time, health, hunger, thirst, ranchid FROM lxr_ranch_animals WHERE animalid IN (?, ?)', 
                 {animal1id, animal2id}, function(result)
         if not result or #result ~= 2 then
             if Config.Debug then
@@ -1937,7 +2149,7 @@ local function StartBreeding(animal1id, animal2id, isAutomatic)
         local gestationEndTime = currentTime + gestationPeriod
         
         -- Set female as pregnant
-        MySQL.update('UPDATE rex_ranch_animals SET pregnant = 1, gestation_end_time = ? WHERE animalid = ?', 
+        MySQL.update('UPDATE lxr_ranch_animals SET pregnant = 1, gestation_end_time = ? WHERE animalid = ?', 
                      {gestationEndTime, female.animalid}, function(updateResult)
             local rowsAffected = 0
             if type(updateResult) == 'table' then
@@ -1953,9 +2165,9 @@ local function StartBreeding(animal1id, animal2id, isAutomatic)
                 local femaleCooldownTime = currentTime + femaleCooldown
                 local maleCooldownTime = currentTime + maleCooldown
                 
-                MySQL.update('UPDATE rex_ranch_animals SET breeding_ready_time = ? WHERE animalid = ?', 
+                MySQL.update('UPDATE lxr_ranch_animals SET breeding_ready_time = ? WHERE animalid = ?', 
                              {femaleCooldownTime, female.animalid})
-                MySQL.update('UPDATE rex_ranch_animals SET breeding_ready_time = ? WHERE animalid = ?', 
+                MySQL.update('UPDATE lxr_ranch_animals SET breeding_ready_time = ? WHERE animalid = ?', 
                              {maleCooldownTime, male.animalid})
                 
                 if Config.Debug then
@@ -1966,11 +2178,11 @@ local function StartBreeding(animal1id, animal2id, isAutomatic)
                 -- Send notification if automatic breeding notifications are enabled
                 if isAutomatic and Config.AutomaticBreedingNotifications then
                     local daysRemaining = math.floor(gestationPeriod / (24 * 3600))
-                    print('^2[REX-RANCH AUTO-BREEDING]^7 Animals ' .. female.animalid .. ' and ' .. male.animalid .. ' have bred! Offspring due in ' .. daysRemaining .. ' days at ranch ' .. female.ranchid)
+                    print('^2[LXR-RANCH AUTO-BREEDING]^7 Animals ' .. female.animalid .. ' and ' .. male.animalid .. ' have bred! Offspring due in ' .. daysRemaining .. ' days at ranch ' .. female.ranchid)
                 end
                 
                 -- Refresh animals to show pregnancy status
-                TriggerEvent('rex-ranch:server:refreshAnimals')
+                TriggerEvent('lxr-ranch:server:refreshAnimals')
             else
                 if Config.Debug then
                     print('^1[BREEDING ERROR]^7 Failed to update pregnancy status for animal ' .. female.animalid)
@@ -1983,7 +2195,7 @@ end
 ---------------------------------------------
 -- Start breeding process (manual trigger from players)
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:server:startBreeding', function(animal1id, animal2id)
+RegisterNetEvent('lxr-ranch:server:startBreeding', function(animal1id, animal2id)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
@@ -2017,7 +2229,7 @@ CreateThread(function()
         return
     end
     
-    print('^2[REX-RANCH]^7 Initializing automatic breeding system (check interval: ' .. Config.AutomaticBreedingCheckInterval .. 's, max distance: ' .. Config.AutomaticBreedingMaxDistance .. 'm)')
+    print('^2[LXR-RANCH]^7 Initializing automatic breeding system (check interval: ' .. Config.AutomaticBreedingCheckInterval .. 's, max distance: ' .. Config.AutomaticBreedingMaxDistance .. 'm)')
     
     -- Run automatic breeding checks
     while true do
@@ -2028,7 +2240,7 @@ CreateThread(function()
         end
         
         -- Get all animals that could potentially breed
-        MySQL.query('SELECT animalid, model, gender, age, pregnant, breeding_ready_time, health, hunger, thirst, ranchid, pos_x, pos_y, pos_z, born FROM rex_ranch_animals WHERE pregnant = 0', {}, function(animals)
+        MySQL.query('SELECT animalid, model, gender, age, pregnant, breeding_ready_time, health, hunger, thirst, ranchid, pos_x, pos_y, pos_z, born FROM lxr_ranch_animals WHERE pregnant = 0', {}, function(animals)
             if not animals or #animals < 2 then
                 if Config.Debug then
                     print('^3[AUTO-BREEDING]^7 Not enough animals for breeding (need at least 2 non-pregnant animals)')
@@ -2106,7 +2318,7 @@ CreateThread(function()
                 if Config.RestrictMaleBreedingWhenFemalesPregnant then
                     -- Check if there are any pregnant females in this ranch
                     local hasPregnantFemales = false
-                    MySQL.query('SELECT COUNT(*) as count FROM rex_ranch_animals WHERE ranchid = ? AND gender = ? AND pregnant = 1', 
+                    MySQL.query('SELECT COUNT(*) as count FROM lxr_ranch_animals WHERE ranchid = ? AND gender = ? AND pregnant = 1', 
                                 {ranchid, 'female'}, function(pregnantResult)
                         if pregnantResult and #pregnantResult > 0 and pregnantResult[1].count > 0 then
                             hasPregnantFemales = true
@@ -2166,15 +2378,15 @@ CreateThread(function()
     Wait(5000)
     
     if not lib or not lib.cron then
-        print('^1[REX-RANCH ERROR]^7 ox_lib cron not available! Make sure ox_lib is started before rex-ranch.')
+        print('^1[LXR-RANCH ERROR]^7 ox_lib cron not available! Make sure ox_lib is started before lxr-ranch.')
         return
     end
     
-    print('^2[REX-RANCH]^7 Initializing animal survival cronjob with schedule: ' .. Config.AnimalCronJob)
+    print('^2[LXR-RANCH]^7 Initializing animal survival cronjob with schedule: ' .. Config.AnimalCronJob)
     
     lib.cron.new(Config.AnimalCronJob, function ()
         if Config.Debug then
-            print('^2[REX-RANCH CRON]^7 Starting animal update cycle at ' .. os.date('%Y-%m-%d %H:%M:%S'))
+            print('^2[LXR-RANCH CRON]^7 Starting animal update cycle at ' .. os.date('%Y-%m-%d %H:%M:%S'))
         end
         
         -- Run in separate thread to avoid blocking cron
@@ -2189,16 +2401,16 @@ end)
 ---------------------------------------------
 function ProcessAnimalSurvival()  
     local success, cronError = pcall(function()
-        MySQL.query('SELECT animalid, model, born, health, thirst, hunger, last_production, product_ready, gender, pregnant, gestation_end_time, ranchid, pos_x, pos_y, pos_z, pos_w FROM rex_ranch_animals', {}, function(animals)
+        MySQL.query('SELECT animalid, model, born, health, thirst, hunger, last_production, product_ready, gender, pregnant, gestation_end_time, ranchid, pos_x, pos_y, pos_z, pos_w FROM lxr_ranch_animals', {}, function(animals)
             if not animals or #animals == 0 then
                 if Config.Debug then
-                    print('^3[REX-RANCH CRON]^7 No animals found in database or query returned empty')
+                    print('^3[LXR-RANCH CRON]^7 No animals found in database or query returned empty')
                 end
                 return
             end
             
             if Config.Debug then
-                print('^2[REX-RANCH CRON]^7 Processing ' .. #animals .. ' animals')
+                print('^2[LXR-RANCH CRON]^7 Processing ' .. #animals .. ' animals')
             end
 
         local scaleTable = {
@@ -2309,7 +2521,7 @@ function ProcessAnimalSurvival()
                             local randomY = animal.pos_y + math.random(-spawnVariation, spawnVariation)
                             
                             -- Insert offspring into database with error handling (non-blocking)
-                            MySQL.insert('INSERT INTO rex_ranch_animals (ranchid, animalid, model, pos_x, pos_y, pos_z, pos_w, health, hunger, thirst, scale, age, born, gender, pregnant, breeding_ready_time, mother_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
+                            MySQL.insert('INSERT INTO lxr_ranch_animals (ranchid, animalid, model, pos_x, pos_y, pos_z, pos_w, health, hunger, thirst, scale, age, born, gender, pregnant, breeding_ready_time, mother_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
                                 animal.ranchid,
                                 offspringId,
                                 offspringModel,
@@ -2360,7 +2572,7 @@ function ProcessAnimalSurvival()
                         local postBirthCooldown = GetBreedingCooldown('female')
                         local postBirthCooldownTime = currentTime + postBirthCooldown
                         
-                        MySQL.update('UPDATE rex_ranch_animals SET pregnant = 0, gestation_end_time = NULL, breeding_ready_time = ? WHERE animalid = ?', 
+                        MySQL.update('UPDATE lxr_ranch_animals SET pregnant = 0, gestation_end_time = NULL, breeding_ready_time = ? WHERE animalid = ?', 
                                      {postBirthCooldownTime, animal.animalid}, function(updateResult)
                             -- updateResult can be a table with affectedRows or a number
                             local rowsAffected = 0
@@ -2377,7 +2589,7 @@ function ProcessAnimalSurvival()
                                 
                                 -- Update client-side pregnancy data
                                 if Config.UpdateClientsOnCron then
-                                    TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', -1, animal.animalid, {
+                                    TriggerClientEvent('lxr-ranch:client:refreshSingleAnimal', -1, animal.animalid, {
                                         pregnant = 0,
                                         gestation_end_time = nil,
                                         breeding_ready_time = postBirthCooldownTime
@@ -2398,12 +2610,12 @@ function ProcessAnimalSurvival()
                                 table.insert(offspringDescription, count .. ' ' .. modelName .. (count > 1 and 's' or ''))
                             end
                             local description = table.concat(offspringDescription, ', ')
-                            print('^2[REX-RANCH BREEDING]^7 ' .. description .. ' born at ' .. animal.ranchid .. ' (mother: ' .. animal.animalid .. ')')
+                            print('^2[LXR-RANCH BREEDING]^7 ' .. description .. ' born at ' .. animal.ranchid .. ' (mother: ' .. animal.animalid .. ')')
                         end
                         
                         -- Refresh animals after breeding to show new offspring
                         SetTimeout(2000, function()
-                            TriggerEvent('rex-ranch:server:refreshAnimals')
+                            TriggerEvent('lxr-ranch:server:refreshAnimals')
                         end)
                         end)
                         
@@ -2471,7 +2683,7 @@ function ProcessAnimalSurvival()
                         
                         -- Use a more reliable update with better error handling
                         local success, updateError = pcall(function()
-                            return MySQL.update.await('UPDATE rex_ranch_animals SET last_production = ?, product_ready = 1 WHERE animalid = ?', {
+                            return MySQL.update.await('UPDATE lxr_ranch_animals SET last_production = ?, product_ready = 1 WHERE animalid = ?', {
                                 currentTime, animal.animalid
                             })
                         end)
@@ -2483,14 +2695,14 @@ function ProcessAnimalSurvival()
                             
                             -- Update client-side production data immediately
                             if Config.UpdateClientsOnCron then
-                                TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', -1, animal.animalid, {
+                                TriggerClientEvent('lxr-ranch:client:refreshSingleAnimal', -1, animal.animalid, {
                                     last_production = currentTime,
                                     product_ready = 1
                                 })
                             end
                             
                             if Config.ServerNotify then
-                                print('^2[REX-RANCH PRODUCTION]^7 ' .. productConfig.product .. ' ready for collection from animal ' .. animal.animalid .. ' at ranch ' .. animal.ranchid)
+                                print('^2[LXR-RANCH PRODUCTION]^7 ' .. productConfig.product .. ' ready for collection from animal ' .. animal.animalid .. ' at ranch ' .. animal.ranchid)
                             end
                         else
                             if Config.Debug then
@@ -2552,7 +2764,7 @@ function ProcessAnimalSurvival()
             if newHealth <= 0 then
                 table.insert(animalsToRemove, animal.animalid)
                 if Config.ServerNotify then
-                    print('^1[REX-RANCH]^7 Animal ' .. animal.animalid .. ' has died and will be removed from the database.')
+                    print('^1[LXR-RANCH]^7 Animal ' .. animal.animalid .. ' has died and will be removed from the database.')
                 end
             else
                 -- Collect updates for batch processing including scale and age
@@ -2588,7 +2800,7 @@ function ProcessAnimalSurvival()
                 end
                 
                 -- Use individual updates for better reliability (non-blocking)
-                MySQL.update('UPDATE rex_ranch_animals SET hunger = ?, thirst = ?, health = ?, scale = ?, age = ? WHERE animalid = ?', {
+                MySQL.update('UPDATE lxr_ranch_animals SET hunger = ?, thirst = ?, health = ?, scale = ?, age = ? WHERE animalid = ?', {
                     update.hunger or 0,
                     update.thirst or 0,
                     update.health or 0,
@@ -2612,7 +2824,7 @@ function ProcessAnimalSurvival()
                         
                         -- Update client-side data for this specific animal
                         if Config.UpdateClientsOnCron then
-                            TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', -1, update.animalid, {
+                            TriggerClientEvent('lxr-ranch:client:refreshSingleAnimal', -1, update.animalid, {
                                 hunger = update.hunger,
                                 thirst = update.thirst,
                                 health = update.health,
@@ -2638,15 +2850,15 @@ function ProcessAnimalSurvival()
         
         -- Clean up expired breeding cooldowns (separate simple query)
         local currentTime = os.time()
-        MySQL.query('SELECT animalid FROM rex_ranch_animals WHERE breeding_ready_time > 0 AND breeding_ready_time <= ?', {currentTime}, function(expiredAnimals)
+        MySQL.query('SELECT animalid FROM lxr_ranch_animals WHERE breeding_ready_time > 0 AND breeding_ready_time <= ?', {currentTime}, function(expiredAnimals)
             if expiredAnimals and #expiredAnimals > 0 then
                 -- Clear the cooldowns in database
-                MySQL.execute('UPDATE rex_ranch_animals SET breeding_ready_time = 0 WHERE breeding_ready_time > 0 AND breeding_ready_time <= ?', {currentTime})
+                MySQL.execute('UPDATE lxr_ranch_animals SET breeding_ready_time = 0 WHERE breeding_ready_time > 0 AND breeding_ready_time <= ?', {currentTime})
                 
                 -- Update client cache for each expired animal
                 if Config.UpdateClientsOnCron then
                     for _, animal in ipairs(expiredAnimals) do
-                        TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', -1, animal.animalid, {
+                        TriggerClientEvent('lxr-ranch:client:refreshSingleAnimal', -1, animal.animalid, {
                             breeding_ready_time = 0
                         })
                         
@@ -2661,23 +2873,23 @@ function ProcessAnimalSurvival()
         -- Remove dead animals from database and client
         if #animalsToRemove > 0 then
             if Config.Debug then
-                print('^1[REX-RANCH]^7 Removing ' .. #animalsToRemove .. ' dead animals from database and game world')
+                print('^1[LXR-RANCH]^7 Removing ' .. #animalsToRemove .. ' dead animals from database and game world')
                 for _, id in ipairs(animalsToRemove) do
-                    print('^1[REX-RANCH DEBUG]^7 Dead animal ID: ' .. tostring(id))
+                    print('^1[LXR-RANCH DEBUG]^7 Dead animal ID: ' .. tostring(id))
                 end
             end
             
             -- Immediately remove animals from clients (don't wait for database)
             for _, animalid in ipairs(animalsToRemove) do
                 if Config.Debug then
-                    print('^1[REX-RANCH]^7 Immediately removing animal ' .. animalid .. ' from all clients')
+                    print('^1[LXR-RANCH]^7 Immediately removing animal ' .. animalid .. ' from all clients')
                 end
-                TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animalid)
+                TriggerClientEvent('lxr-ranch:client:removeAnimal', -1, animalid)
             end
             
             -- Then remove from database
             for _, animalid in ipairs(animalsToRemove) do
-                MySQL.execute('DELETE FROM rex_ranch_animals WHERE animalid = ?', {animalid}, function(deleteResult)
+                MySQL.execute('DELETE FROM lxr_ranch_animals WHERE animalid = ?', {animalid}, function(deleteResult)
                     -- deleteResult can be a table with affectedRows or a number
                     local rowsAffected = 0
                     if type(deleteResult) == 'table' then
@@ -2688,11 +2900,11 @@ function ProcessAnimalSurvival()
                     
                     if rowsAffected > 0 then
                         if Config.Debug then
-                            print('^2[REX-RANCH]^7 Successfully removed animal ' .. animalid .. ' from database')
+                            print('^2[LXR-RANCH]^7 Successfully removed animal ' .. animalid .. ' from database')
                         end
                     else
                         if Config.Debug then
-                            print('^1[REX-RANCH ERROR]^7 Failed to remove animal ' .. animalid .. ' from database')
+                            print('^1[LXR-RANCH ERROR]^7 Failed to remove animal ' .. animalid .. ' from database')
                         end
                         -- If database removal fails, we should still keep the client removal
                         -- The animal is already gone from client, database cleanup can be retried
@@ -2702,29 +2914,29 @@ function ProcessAnimalSurvival()
             
             -- Refresh animals on client after removals (delayed)
             SetTimeout(1000, function()
-                TriggerEvent('rex-ranch:server:refreshAnimals')
+                TriggerEvent('lxr-ranch:server:refreshAnimals')
             end)
             
             if Config.ServerNotify then
-                print('^1[REX-RANCH]^7 Removed ' .. #animalsToRemove .. ' dead animals from the game world')
+                print('^1[LXR-RANCH]^7 Removed ' .. #animalsToRemove .. ' dead animals from the game world')
             end
         end
         
         -- Print completion summary
         if Config.Debug then
             if #animalsToRemove > 0 then
-                print('^2[REX-RANCH]^7 Animal survival check completed. ' .. #animals .. ' animals processed, ' .. #animalsToRemove .. ' animals died.')
+                print('^2[LXR-RANCH]^7 Animal survival check completed. ' .. #animals .. ' animals processed, ' .. #animalsToRemove .. ' animals died.')
             else
-                print('^2[REX-RANCH]^7 Animal survival check completed. ' .. #animals .. ' animals updated.')
+                print('^2[LXR-RANCH]^7 Animal survival check completed. ' .. #animals .. ' animals updated.')
             end
             
             if #batchUpdates > 0 and Config.UpdateClientsOnCron then
-                print('^2[REX-RANCH]^7 Updated client data for ' .. #batchUpdates .. ' animals')
+                print('^2[LXR-RANCH]^7 Updated client data for ' .. #batchUpdates .. ' animals')
             end
         end
         
         if Config.Debug then
-            print('^2[REX-RANCH CRON]^7 Animal update cycle completed successfully')
+            print('^2[LXR-RANCH CRON]^7 Animal update cycle completed successfully')
         end
         
         -- Refresh all animal data on clients after cronjob completion
@@ -2732,9 +2944,9 @@ function ProcessAnimalSurvival()
         if Config.RefreshAfterCron then
             SetTimeout(500, function()
                 if Config.Debug then
-                    print('^2[REX-RANCH CRON]^7 Refreshing all animal data on clients')
+                    print('^2[LXR-RANCH CRON]^7 Refreshing all animal data on clients')
                 end
-                TriggerEvent('rex-ranch:server:refreshAnimals')
+                TriggerEvent('lxr-ranch:server:refreshAnimals')
             end)
         end
     end) -- Close MySQL.query callback
@@ -2742,12 +2954,12 @@ function ProcessAnimalSurvival()
     
     if not success then
         cronFailures = cronFailures + 1
-        print('^1[REX-RANCH CRON ERROR]^7 Animal cron job failed (failure #' .. cronFailures .. '): ' .. tostring(cronError))
+        print('^1[LXR-RANCH CRON ERROR]^7 Animal cron job failed (failure #' .. cronFailures .. '): ' .. tostring(cronError))
         
         -- If we have too many failures, something is seriously wrong
         if cronFailures >= 5 then
-            print('^1[REX-RANCH CRITICAL]^7 Animal survival cronjob has failed ' .. cronFailures .. ' times!')
-            print('^1[REX-RANCH CRITICAL]^7 This may indicate a database connection issue or resource conflict.')
+            print('^1[LXR-RANCH CRITICAL]^7 Animal survival cronjob has failed ' .. cronFailures .. ' times!')
+            print('^1[LXR-RANCH CRITICAL]^7 This may indicate a database connection issue or resource conflict.')
         end
     else
         cronFailures = 0 -- Reset failure counter on success
@@ -2759,7 +2971,7 @@ end
 ---------------------------------------------
 
 -- Get staff list for a ranch
-RSGCore.Functions.CreateCallback('rex-ranch:server:getStaffList', function(source, cb, ranchid)
+RSGCore.Functions.CreateCallback('lxr-ranch:server:getStaffList', function(source, cb, ranchid)
     local Player = RSGCore.Functions.GetPlayer(source)
     if not Player or not ranchid then 
         cb({employees = {}})
@@ -2821,7 +3033,7 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getStaffList', function(sourc
 end)
 
 -- Get nearby players
-RSGCore.Functions.CreateCallback('rex-ranch:server:getNearbyPlayers', function(src, cb)
+RSGCore.Functions.CreateCallback('lxr-ranch:server:getNearbyPlayers', function(src, cb)
     local Player = RSGCore.Functions.GetPlayer(src)
     if not Player then 
         cb({})
@@ -2855,7 +3067,7 @@ RSGCore.Functions.CreateCallback('rex-ranch:server:getNearbyPlayers', function(s
 end)
 
 -- Hire employee
-RegisterNetEvent('rex-ranch:server:hireEmployee', function(ranchid, targetId, grade)
+RegisterNetEvent('lxr-ranch:server:hireEmployee', function(ranchid, targetId, grade)
 
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
@@ -2885,7 +3097,7 @@ RegisterNetEvent('rex-ranch:server:hireEmployee', function(ranchid, targetId, gr
         return
 	end
 	
-	local staffCount = exports['rex-ranch']:getStaffCount(ranchid)
+	local staffCount = exports['lxr-ranch']:getStaffCount(ranchid)
 	if staffCount >= Config.StaffManagement.MaxEmployeesPerRanch then
         TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You have the maximum staff hired!'})
         return
@@ -2898,7 +3110,7 @@ RegisterNetEvent('rex-ranch:server:hireEmployee', function(ranchid, targetId, gr
 end)
 
 -- Fire employee
-RegisterNetEvent('rex-ranch:server:fireEmployee', function(ranchid, targetCitizenid)
+RegisterNetEvent('lxr-ranch:server:fireEmployee', function(ranchid, targetCitizenid)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
@@ -2972,7 +3184,7 @@ RegisterNetEvent('rex-ranch:server:fireEmployee', function(ranchid, targetCitize
 end)
 
 -- Promote employee
-RegisterNetEvent('rex-ranch:server:promoteEmployee', function(ranchid, targetCitizenid)
+RegisterNetEvent('lxr-ranch:server:promoteEmployee', function(ranchid, targetCitizenid)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
@@ -3020,7 +3232,7 @@ RegisterNetEvent('rex-ranch:server:promoteEmployee', function(ranchid, targetCit
 end)
 
 -- Demote employee
-RegisterNetEvent('rex-ranch:server:demoteEmployee', function(ranchid, targetCitizenid)
+RegisterNetEvent('lxr-ranch:server:demoteEmployee', function(ranchid, targetCitizenid)
     local src = source
     local Player = RSGCore.Functions.GetPlayer(src)
     
@@ -3072,3 +3284,82 @@ RegisterNetEvent('rex-ranch:server:demoteEmployee', function(ranchid, targetCiti
     end
 end)
 
+-- ████████████████████████████████████████████████████████████████████████████████
+-- ████████████████████████ TAX PAYMENT SYSTEM ████████████████████████████████████
+-- ████████████████████████████████████████████████████████████████████████████████
+
+RegisterNetEvent('lxr-ranch:server:payTax', function(ranchid)
+    local src = source
+    local Player = RSGCore.Functions.GetPlayer(src)
+    if not Player or not ranchid then return end
+    if IsRateLimited(src, 'payTax') then return end
+
+    local ranch = MySQL.query.await('SELECT * FROM lxr_ranches WHERE ranchid = ?', {ranchid})
+    if not ranch or #ranch == 0 then return end
+    ranch = ranch[1]
+
+    local tier = ranch.tier or 1
+    local baseTax = Config.Taxation and Config.Taxation.baseTax or 50
+    local tierMultiplier = Config.Taxation and Config.Taxation.tierMultiplier or 25
+    local taxAmount = baseTax + (tier * tierMultiplier)
+
+    local playerMoney = Player.PlayerData.money.cash
+    if playerMoney < taxAmount then
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Not enough money! Tax: $' .. taxAmount})
+        return
+    end
+
+    Player.Functions.RemoveMoney('cash', taxAmount)
+    local nextDue = os.time() + (Config.Taxation and Config.Taxation.cycleDays or 7) * 86400
+    MySQL.update('UPDATE lxr_ranches SET tax_status = ?, tax_due_date = ?, last_tax_paid = ? WHERE ranchid = ?', {
+        'paid', nextDue, os.time(), ranchid
+    })
+    MySQL.insert('INSERT INTO lxr_ranch_tax_records (ranchid, cycle_start, cycle_end, amount_due, amount_paid, status, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?)', {
+        ranchid, os.time(), nextDue, taxAmount, taxAmount, 'paid', os.time()
+    })
+    TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Tax paid: $' .. taxAmount .. '! Next due in ' .. (Config.Taxation and Config.Taxation.cycleDays or 7) .. ' days.'})
+end)
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- ████████████████████████ NUI DATA CALLBACKS ████████████████████████████████████
+-- ████████████████████████████████████████████████████████████████████████████████
+
+RSGCore.Functions.CreateCallback('lxr-ranch:server:getDashboardData', function(src, cb, ranchid)
+    local Player = RSGCore.Functions.GetPlayer(src)
+    if not Player or not ranchid then cb(nil) return end
+
+    local animals = MySQL.query.await('SELECT * FROM lxr_ranch_animals WHERE ranchid = ?', {ranchid})
+    local ranch = MySQL.query.await('SELECT * FROM lxr_ranches WHERE ranchid = ?', {ranchid})
+    local transactions = MySQL.query.await('SELECT * FROM lxr_ranch_transactions WHERE ranchid = ? ORDER BY timestamp DESC LIMIT 20', {ranchid})
+
+    local conditionScore = CalculateConditionScore(animals)
+
+    if ranch and #ranch > 0 then
+        MySQL.update('UPDATE lxr_ranches SET condition_score = ? WHERE ranchid = ?', {conditionScore, ranchid})
+    end
+
+    local speciesCounts = {}
+    local totalProduction = 0
+    if animals then
+        for _, animal in ipairs(animals) do
+            local species = animal.species or animal.model or 'unknown'
+            speciesCounts[species] = (speciesCounts[species] or 0) + 1
+            if animal.product_ready == 1 then totalProduction = totalProduction + 1 end
+        end
+    end
+
+    cb({
+        ranch = ranch and ranch[1] or { ranchid = ranchid, tier = 1, condition_score = conditionScore },
+        animalCount = animals and #animals or 0,
+        speciesCounts = speciesCounts,
+        conditionScore = conditionScore,
+        totalProduction = totalProduction,
+        transactions = transactions or {},
+        marketPrices = MarketPrices
+    })
+end)
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 🐺 wolves.land — The Land of Wolves
+-- © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+-- ═══════════════════════════════════════════════════════════════════════════════
