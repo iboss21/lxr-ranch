@@ -1,23 +1,46 @@
-# Rex Ranch
+# 🐺 lxr-ranch — The Land of Wolves
 
-Rex Ranch is an RSG-Framework resource for RedM (Red Dead Redemption 2) that provides full ranch management: animals, breeding, production, herding, staff, storage, and buy/sell systems.
+> Persistent ranch simulation & management system with animal lifecycle, breeding, genetics, economy, and taxation for RedM.
 
-- **Framework:** RSG-Core
-- **Dependencies:** `ox_lib`, `oxmysql`
-- **Supported:** RedM on Lua 5.4
+## Features
 
-See `DOCUMENTATION.md` for full installation, configuration, exports, events, and troubleshooting.
+- 6 animal species (Chickens, Turkeys, Cows, Sheep, Goats, Pigs) with full lifecycle simulation
+- Deterministic breeding system with genetic inheritance
+- Dynamic economy with supply/demand pricing
+- Weekly taxation system with penalty progression
+- Ranch tier system (1-5) with progressive unlocks
+- Condition score system affecting production and breeding
+- Staff management with 4 permission levels
+- NUI ranch dashboard with real-time data
+- Multi-framework support (LXR Core, RSG Core, VORP Core, Standalone)
+- Anti-abuse system with rate limiting and server validation
+- LOD-based performance optimization
 
-Quick start:
+## Requirements
 
-- Add to `server.cfg`:
-  ```
-  ensure rsg-core
-  ensure ox_lib
-  ensure rex-ranch
-  ```
-- Import DB: `mysql < installation/rex-ranch.sql`
-- Add shared items/jobs from `installation/shared_items.lua` and `installation/shared_jobs.lua`
-- Configure options in `shared/config.lua` before first run
+- RedM Server
+- LXR-Core / RSG-Core / VORP-Core
+- ox_lib
+- oxmysql
 
-For advanced usage and export examples, open `DOCUMENTATION.md`.
+## Installation
+
+See [docs/INSTALL.md](docs/INSTALL.md) for full setup instructions.
+
+## Configuration
+
+See [docs/CONFIG.md](docs/CONFIG.md) for all available options.
+
+## Frameworks
+
+See [docs/FRAMEWORKS.md](docs/FRAMEWORKS.md) for supported frameworks.
+
+## Support
+
+- Discord: https://discord.gg/CrKcWdfd3A
+- Store: https://theluxempire.tebex.io
+- Website: https://www.wolves.land
+
+---
+
+**© 2026 iBoss21 / The Lux Empire — All Rights Reserved**

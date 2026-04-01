@@ -1,3 +1,11 @@
+--[[ ═══════════════════════════════════════════════════════════════════════════
+     🐺 LXR-RANCH — The Land of Wolves
+     ═══════════════════════════════════════════════════════════════════════════
+     Developer   : iBoss21 | Brand : The Lux Empire
+     https://www.wolves.land | https://discord.gg/CrKcWdfd3A
+     ═══════════════════════════════════════════════════════════════════════════
+     © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+     ═══════════════════════════════════════════════════════════════════════════ ]]
 local RSGCore = exports['rsg-core']:GetCoreObject()
 local herdingActive = false
 local herdedAnimals = {}
@@ -46,13 +54,13 @@ RegisterCommand('herd', function(source, args, rawCommand)
         end
     end
     
-    TriggerEvent('rex-ranch:client:openHerdingMenu')
+    TriggerEvent('lxr-ranch:client:openHerdingMenu')
 end, false)
 
 ---------------------------------------------
 -- herding menu
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:openHerdingMenu', function()
+RegisterNetEvent('lxr-ranch:client:openHerdingMenu', function()
     -- Debug: Check for nearby animals
     if Config.Debug then
         local nearbyAnimals = GetNearbyAnimals()
@@ -71,7 +79,7 @@ RegisterNetEvent('rex-ranch:client:openHerdingMenu', function()
                     title = 'Stop Herding',
                     description = 'Stop herding all animals (' .. #herdedAnimals .. ' animals)',
                     icon = 'fa-solid fa-stop',
-                    event = 'rex-ranch:client:stopHerding'
+                    event = 'lxr-ranch:client:stopHerding'
                 },
                 {
                     title = 'Herding Status',
@@ -88,13 +96,13 @@ RegisterNetEvent('rex-ranch:client:openHerdingMenu', function()
                 title = 'Herd by Distance',
                 description = 'Herd all animals within ' .. Config.HerdingDistance .. ' units',
                 icon = 'fa-solid fa-location-dot',
-                event = 'rex-ranch:client:startDistanceHerding'
+                event = 'lxr-ranch:client:startDistanceHerding'
             },
             {
                 title = 'Herd by Type',
                 description = 'Select animals by type to herd',
                 icon = 'fa-solid fa-filter',
-                event = 'rex-ranch:client:showTypeMenu',
+                event = 'lxr-ranch:client:showTypeMenu',
                 arrow = true
             }
         }
@@ -105,7 +113,7 @@ RegisterNetEvent('rex-ranch:client:openHerdingMenu', function()
                 title = 'Select Individual Animals',
                 description = 'Choose specific animals to herd',
                 icon = 'fa-solid fa-hand-pointer',
-                event = 'rex-ranch:client:showIndividualSelectionMenu',
+                event = 'lxr-ranch:client:showIndividualSelectionMenu',
                 arrow = true
             })
         end
@@ -122,7 +130,7 @@ end)
 ---------------------------------------------
 -- animal type selection menu
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:showTypeMenu', function()
+RegisterNetEvent('lxr-ranch:client:showTypeMenu', function()
     local nearbyAnimals = GetNearbyAnimals()
     local animalTypes = {}
     local typeCounts = {}
@@ -144,7 +152,7 @@ RegisterNetEvent('rex-ranch:client:showTypeMenu', function()
             title = 'Herd ' .. displayName .. 's',
             description = typeCounts[model] .. ' ' .. displayName .. '(s) nearby',
             icon = 'fa-solid fa-paw',
-            event = 'rex-ranch:client:startTypeHerding',
+            event = 'lxr-ranch:client:startTypeHerding',
             args = { animalType = model }
         })
     end
@@ -170,7 +178,7 @@ end)
 ---------------------------------------------
 -- individual animal selection menu
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:showIndividualSelectionMenu', function()
+RegisterNetEvent('lxr-ranch:client:showIndividualSelectionMenu', function()
     local nearbyAnimals = GetNearbyAnimals()
     
     if #nearbyAnimals == 0 then
@@ -198,14 +206,14 @@ RegisterNetEvent('rex-ranch:client:showIndividualSelectionMenu', function()
             title = 'Start Herding Selected',
             description = 'Begin herding the ' .. selectedCount .. ' selected animals',
             icon = 'fa-solid fa-play',
-            event = 'rex-ranch:client:startSelectedHerding'
+            event = 'lxr-ranch:client:startSelectedHerding'
         })
         
         table.insert(options, {
             title = 'Clear Selection',
             description = 'Deselect all animals',
             icon = 'fa-solid fa-times',
-            event = 'rex-ranch:client:clearAnimalSelection'
+            event = 'lxr-ranch:client:clearAnimalSelection'
         })
         
         table.insert(options, {
@@ -233,7 +241,7 @@ RegisterNetEvent('rex-ranch:client:showIndividualSelectionMenu', function()
             title = displayName .. ' #' .. i .. ' ' .. statusText,
             description = description,
             icon = statusIcon,
-            event = 'rex-ranch:client:toggleAnimalSelection',
+            event = 'lxr-ranch:client:toggleAnimalSelection',
             args = { 
                 animalData = animalData,
                 animalIndex = i
@@ -253,7 +261,7 @@ end)
 ---------------------------------------------
 -- toggle animal selection
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:toggleAnimalSelection', function(data)
+RegisterNetEvent('lxr-ranch:client:toggleAnimalSelection', function(data)
     local animalData = data.animalData
     local animalId = animalData.id
     
@@ -278,7 +286,7 @@ RegisterNetEvent('rex-ranch:client:toggleAnimalSelection', function(data)
                 description = 'Maximum ' .. Config.HerdingMaxAnimals .. ' animals can be selected',
                 type = 'error'
             })
-            TriggerEvent('rex-ranch:client:showIndividualSelectionMenu') -- Refresh menu
+            TriggerEvent('lxr-ranch:client:showIndividualSelectionMenu') -- Refresh menu
             return
         end
         
@@ -292,13 +300,13 @@ RegisterNetEvent('rex-ranch:client:toggleAnimalSelection', function(data)
     end
     
     -- Refresh the menu to show updated selection
-    TriggerEvent('rex-ranch:client:showIndividualSelectionMenu')
+    TriggerEvent('lxr-ranch:client:showIndividualSelectionMenu')
 end)
 
 ---------------------------------------------
 -- clear animal selection
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:clearAnimalSelection', function()
+RegisterNetEvent('lxr-ranch:client:clearAnimalSelection', function()
     local clearedCount = 0
     for _ in pairs(selectedAnimals) do
         clearedCount = clearedCount + 1
@@ -313,13 +321,13 @@ RegisterNetEvent('rex-ranch:client:clearAnimalSelection', function()
     })
     
     -- Refresh the menu
-    TriggerEvent('rex-ranch:client:showIndividualSelectionMenu')
+    TriggerEvent('lxr-ranch:client:showIndividualSelectionMenu')
 end)
 
 ---------------------------------------------
 -- start herding selected animals
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:startSelectedHerding', function()
+RegisterNetEvent('lxr-ranch:client:startSelectedHerding', function()
     if herdingActive then
         lib.notify({ title = 'Already Herding', description = 'Stop current herding session first!', type = 'error' })
         return
@@ -356,7 +364,7 @@ end)
 ---------------------------------------------
 -- start distance-based herding
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:startDistanceHerding', function()
+RegisterNetEvent('lxr-ranch:client:startDistanceHerding', function()
     if herdingActive then
         lib.notify({ title = 'Already Herding', description = 'Stop current herding session first!', type = 'error' })
         return
@@ -379,7 +387,7 @@ end)
 ---------------------------------------------
 -- start type-based herding
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:startTypeHerding', function(data)
+RegisterNetEvent('lxr-ranch:client:startTypeHerding', function(data)
     if herdingActive then
         lib.notify({ title = 'Already Herding', description = 'Stop current herding session first!', type = 'error' })
         return
@@ -410,7 +418,7 @@ end)
 ---------------------------------------------
 -- stop herding
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:stopHerding', function()
+RegisterNetEvent('lxr-ranch:client:stopHerding', function()
     if not herdingActive then return end
     
     herdingActive = false
@@ -428,13 +436,13 @@ RegisterNetEvent('rex-ranch:client:stopHerding', function()
             ClearPedTasks(animalInfo.entity)
             local pos = GetEntityCoords(animalInfo.entity)
             local heading = GetEntityHeading(animalInfo.entity)
-            TriggerServerEvent('rex-ranch:server:saveAnimalPosition', animalId, pos.x, pos.y, pos.z, heading)
+            TriggerServerEvent('lxr-ranch:server:saveAnimalPosition', animalId, pos.x, pos.y, pos.z, heading)
         end
     end
     
     -- Disable transport mode
     if Config.TransportMode then
-        TriggerEvent('rex-ranch:client:setAnimalTransporting', animalIds, false)
+        TriggerEvent('lxr-ranch:client:setAnimalTransporting', animalIds, false)
         if Config.Debug then
             print('^2[HERDING DEBUG]^7 Disabled transport mode for ' .. #animalIds .. ' animals')
         end
@@ -467,7 +475,7 @@ function GetNearbyAnimals()
     -- Try to get animal data cache, fall back to entity scanning if not available
     local animalDataCache = nil
     local success, result = pcall(function()
-        return exports['rex-ranch']:GetAnimalDataCache()
+        return exports['lxr-ranch']:GetAnimalDataCache()
     end)
     
     if success and result then
@@ -500,7 +508,7 @@ function GetNearbyAnimals()
                     -- Try to get the actual spawned entity
                     local animalEntity = nil
                     pcall(function()
-                        animalEntity = exports['rex-ranch']:GetAnimalEntityById(animalData.animalid)
+                        animalEntity = exports['lxr-ranch']:GetAnimalEntityById(animalData.animalid)
                     end)
                     
                     if Config.Debug then
@@ -632,7 +640,7 @@ function StartHerding(animals, herdType)
     
     -- Enable transport mode to prevent despawning
     if Config.TransportMode then
-        TriggerEvent('rex-ranch:client:setAnimalTransporting', animalIds, true)
+        TriggerEvent('lxr-ranch:client:setAnimalTransporting', animalIds, true)
         if Config.Debug then
             print('^2[HERDING DEBUG]^7 Enabled transport mode for ' .. #animalIds .. ' animals')
         end
@@ -669,7 +677,7 @@ function StartHerding(animals, herdType)
             
             -- Check timeout
             if herdingStartTime and (GetGameTimer() - herdingStartTime) > (Config.HerdingTimeout * 1000) then
-                TriggerEvent('rex-ranch:client:stopHerding')
+                TriggerEvent('lxr-ranch:client:stopHerding')
                 lib.notify({ title = 'Herding Timeout', description = 'Herding session ended automatically', type = 'info' })
                 break
             end
@@ -733,7 +741,7 @@ function UpdateHerdingMovement()
     end
     
     if remainingAnimals == 0 then
-        TriggerEvent('rex-ranch:client:stopHerding')
+        TriggerEvent('lxr-ranch:client:stopHerding')
         lib.notify({ title = 'No Animals Left', description = 'All herded animals are gone', type = 'info' })
     end
 end
@@ -744,7 +752,7 @@ end
 AddEventHandler('onResourceStop', function(resourceName)
     if GetCurrentResourceName() ~= resourceName then return end
     if herdingActive then
-        TriggerEvent('rex-ranch:client:stopHerding')
+        TriggerEvent('lxr-ranch:client:stopHerding')
     end
     -- Clear any pending selections
     selectedAnimals = {}
@@ -795,3 +803,8 @@ end, false)
 
 -- Note: Use /herd command to access herding menu
 -- RegisterKeyMapping is not available in RedM
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 🐺 wolves.land — The Land of Wolves
+-- © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+-- ═══════════════════════════════════════════════════════════════════════════════

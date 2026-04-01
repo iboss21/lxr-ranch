@@ -1,3 +1,11 @@
+--[[ ═══════════════════════════════════════════════════════════════════════════
+     🐺 LXR-RANCH — The Land of Wolves
+     ═══════════════════════════════════════════════════════════════════════════
+     Developer   : iBoss21 | Brand : The Lux Empire
+     https://www.wolves.land | https://discord.gg/CrKcWdfd3A
+     ═══════════════════════════════════════════════════════════════════════════
+     © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+     ═══════════════════════════════════════════════════════════════════════════ ]]
 local RSGCore = exports['rsg-core']:GetCoreObject()
 local spawnedPeds = {}
 
@@ -56,7 +64,7 @@ function NearPed(npcData)
             icon = 'far fa-eye',
             label = 'Open Ranch',
             onSelect = function()
-                TriggerEvent('rex-ranch:client:openranch', npcData.ranchid, npcData.jobaccess)
+                TriggerEvent('lxr-ranch:client:openranch', npcData.ranchid, npcData.jobaccess)
             end,
             distance = 2.0
         }
@@ -76,3 +84,8 @@ AddEventHandler("onResourceStop", function(resourceName)
         spawnedPeds[k] = nil
     end
 end)
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 🐺 wolves.land — The Land of Wolves
+-- © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+-- ═══════════════════════════════════════════════════════════════════════════════

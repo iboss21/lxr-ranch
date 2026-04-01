@@ -1,14 +1,22 @@
+--[[ ═══════════════════════════════════════════════════════════════════════════
+     🐺 LXR-RANCH — The Land of Wolves
+     ═══════════════════════════════════════════════════════════════════════════
+     Developer   : iBoss21 | Brand : The Lux Empire
+     https://www.wolves.land | https://discord.gg/CrKcWdfd3A
+     ═══════════════════════════════════════════════════════════════════════════
+     © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+     ═══════════════════════════════════════════════════════════════════════════ ]]
 local RSGCore = exports['rsg-core']:GetCoreObject()
 lib.locale()
 
 ---------------------------------------------
 -- Open Staff Management Menu
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:openStaffManagement', function(ranchid)
+RegisterNetEvent('lxr-ranch:client:openStaffManagement', function(ranchid)
     if not ranchid then return end
     
     -- Request staff data from server
-    RSGCore.Functions.TriggerCallback('rex-ranch:server:getStaffList', function(staffData)
+    RSGCore.Functions.TriggerCallback('lxr-ranch:server:getStaffList', function(staffData)
         if not staffData then
             lib.notify({type = 'error', description = 'Failed to load staff data!'})
             return
@@ -76,7 +84,7 @@ function OpenStaffListMenu(ranchid, staffData)
         title = '⬅️ Back',
         icon = 'fa-solid fa-arrow-left',
         onSelect = function()
-            TriggerEvent('rex-ranch:client:openStaffManagement', ranchid)
+            TriggerEvent('lxr-ranch:client:openStaffManagement', ranchid)
         end
     })
     
@@ -106,9 +114,9 @@ function OpenEmployeeActionsMenu(ranchid, employee)
             description = 'Promote employee to next grade',
             icon = 'fa-solid fa-arrow-up',
             onSelect = function()
-                TriggerServerEvent('rex-ranch:server:promoteEmployee', ranchid, employee.citizenid)
+                TriggerServerEvent('lxr-ranch:server:promoteEmployee', ranchid, employee.citizenid)
                 Wait(500)
-                TriggerEvent('rex-ranch:client:openStaffManagement', ranchid)
+                TriggerEvent('lxr-ranch:client:openStaffManagement', ranchid)
             end
         },
         {
@@ -116,9 +124,9 @@ function OpenEmployeeActionsMenu(ranchid, employee)
             description = 'Demote employee to previous grade',
             icon = 'fa-solid fa-arrow-down',
             onSelect = function()
-                TriggerServerEvent('rex-ranch:server:demoteEmployee', ranchid, employee.citizenid)
+                TriggerServerEvent('lxr-ranch:server:demoteEmployee', ranchid, employee.citizenid)
                 Wait(500)
-                TriggerEvent('rex-ranch:client:openStaffManagement', ranchid)
+                TriggerEvent('lxr-ranch:client:openStaffManagement', ranchid)
             end
         },
         {
@@ -134,9 +142,9 @@ function OpenEmployeeActionsMenu(ranchid, employee)
                 })
                 
                 if confirm == 'confirm' then
-                    TriggerServerEvent('rex-ranch:server:fireEmployee', ranchid, employee.citizenid)
+                    TriggerServerEvent('lxr-ranch:server:fireEmployee', ranchid, employee.citizenid)
                     Wait(500)
-                    TriggerEvent('rex-ranch:client:openStaffManagement', ranchid)
+                    TriggerEvent('lxr-ranch:client:openStaffManagement', ranchid)
                 end
             end
         },
@@ -144,7 +152,7 @@ function OpenEmployeeActionsMenu(ranchid, employee)
             title = '⬅️ Back',
             icon = 'fa-solid fa-arrow-left',
             onSelect = function()
-                TriggerEvent('rex-ranch:client:openStaffManagement', ranchid)
+                TriggerEvent('lxr-ranch:client:openStaffManagement', ranchid)
             end
         }
     }
@@ -202,7 +210,7 @@ end
 ---------------------------------------------
 function OpenHireMenu(ranchid)
     -- Get nearby players
-    RSGCore.Functions.TriggerCallback('rex-ranch:server:getNearbyPlayers', function(nearbyPlayers)
+    RSGCore.Functions.TriggerCallback('lxr-ranch:server:getNearbyPlayers', function(nearbyPlayers)
         if not nearbyPlayers or #nearbyPlayers == 0 then
             lib.notify({type = 'error', description = 'No nearby players found!'})
             return
@@ -225,7 +233,7 @@ function OpenHireMenu(ranchid)
             title = '⬅️ Back',
             icon = 'fa-solid fa-arrow-left',
             onSelect = function()
-                TriggerEvent('rex-ranch:client:openStaffManagement', ranchid)
+                TriggerEvent('lxr-ranch:client:openStaffManagement', ranchid)
             end
         })
         
@@ -257,9 +265,13 @@ function OpenHireConfirmDialog(ranchid, player)
     })
     
     if input then
-        TriggerServerEvent('rex-ranch:server:hireEmployee', ranchid, player.id, input[1])
+        TriggerServerEvent('lxr-ranch:server:hireEmployee', ranchid, player.id, input[1])
         Wait(500)
-        TriggerEvent('rex-ranch:client:openStaffManagement', ranchid)
+        TriggerEvent('lxr-ranch:client:openStaffManagement', ranchid)
     end
 end
 
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 🐺 wolves.land — The Land of Wolves
+-- © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+-- ═══════════════════════════════════════════════════════════════════════════════

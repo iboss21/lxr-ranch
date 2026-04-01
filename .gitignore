@@ -1,0 +1,23 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# 🐺 The Land of Wolves — Distribution Control
+# ═══════════════════════════════════════════════════════════════════════════
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+build/
+dist/
+node_modules/
+
+# Runtime
+logs/
+cache/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

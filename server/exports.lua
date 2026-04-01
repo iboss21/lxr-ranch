@@ -1,5 +1,13 @@
+--[[ ═══════════════════════════════════════════════════════════════════════════
+     🐺 LXR-RANCH — The Land of Wolves
+     ═══════════════════════════════════════════════════════════════════════════
+     Developer   : iBoss21 | Brand : The Lux Empire
+     https://www.wolves.land | https://discord.gg/CrKcWdfd3A
+     ═══════════════════════════════════════════════════════════════════════════
+     © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+     ═══════════════════════════════════════════════════════════════════════════ ]]
 ---------------------------------------------
--- Server-side exports for rex-ranch
+-- Server-side exports for lxr-ranch
 ---------------------------------------------
 
 ---------------------------------------------
@@ -53,7 +61,7 @@ exports('getRanchAnimalCount', function(ranchid)
     if not ranchid then return 0 end
     
     local success, result = pcall(function()
-        return MySQL.query.await("SELECT COUNT(*) as count FROM rex_ranch_animals WHERE ranchid = ?", { ranchid })
+        return MySQL.query.await("SELECT COUNT(*) as count FROM lxr_ranch_animals WHERE ranchid = ?", { ranchid })
     end)
     
     if success and result and result[1] then
@@ -70,7 +78,7 @@ exports('getRanchAnimals', function(ranchid)
     if not ranchid then return {} end
     
     local success, result = pcall(function()
-        return MySQL.query.await("SELECT * FROM rex_ranch_animals WHERE ranchid = ?", { ranchid })
+        return MySQL.query.await("SELECT * FROM lxr_ranch_animals WHERE ranchid = ?", { ranchid })
     end)
     
     if success and result then
@@ -87,7 +95,7 @@ exports('getAnimalData', function(animalid)
     if not animalid then return nil end
     
     local success, result = pcall(function()
-        return MySQL.query.await("SELECT * FROM rex_ranch_animals WHERE animalid = ?", { animalid })
+        return MySQL.query.await("SELECT * FROM lxr_ranch_animals WHERE animalid = ?", { animalid })
     end)
     
     if success and result and #result > 0 then
@@ -115,7 +123,7 @@ exports('addAnimalToRanch', function(ranchid, model, gender, pos_x, pos_y, pos_z
             animalid = math.random(Config.ANIMAL_ID_MIN, Config.ANIMAL_ID_MAX)
             
             local success, result = pcall(function()
-                return MySQL.query.await("SELECT COUNT(*) as count FROM rex_ranch_animals WHERE animalid = ?", { animalid })
+                return MySQL.query.await("SELECT COUNT(*) as count FROM lxr_ranch_animals WHERE animalid = ?", { animalid })
             end)
             
             if success and result and result[1] and result[1].count == 0 then
@@ -146,7 +154,7 @@ exports('addAnimalToRanch', function(ranchid, model, gender, pos_x, pos_y, pos_z
     
     local success, result = pcall(function()
         return MySQL.insert.await([[
-            INSERT INTO rex_ranch_animals (animalid, ranchid, model, gender, age, health, hunger, thirst, 
+            INSERT INTO lxr_ranch_animals (animalid, ranchid, model, gender, age, health, hunger, thirst, 
                                           born, pos_x, pos_y, pos_z, pos_w, product_ready, pregnant, 
                                           breeding_ready_time, gestation_end_time, last_production)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -174,11 +182,11 @@ exports('addAnimalToRanch', function(ranchid, model, gender, pos_x, pos_y, pos_z
     
     if success and result then
         if Config.Debug then
-            print('^2[REX-RANCH EXPORT]^7 Added animal ' .. animalid .. ' to ranch ' .. ranchid)
+            print('^2[LXR-RANCH EXPORT]^7 Added animal ' .. animalid .. ' to ranch ' .. ranchid)
         end
         
         -- Refresh all clients
-        TriggerEvent('rex-ranch:server:refreshAnimals')
+        TriggerEvent('lxr-ranch:server:refreshAnimals')
         
         return animalid
     end
@@ -193,17 +201,17 @@ exports('removeAnimalFromRanch', function(animalid)
     if not animalid then return false end
     
     local success, result = pcall(function()
-        return MySQL.update.await('DELETE FROM rex_ranch_animals WHERE animalid = ?', { animalid })
+        return MySQL.update.await('DELETE FROM lxr_ranch_animals WHERE animalid = ?', { animalid })
     end)
     
     if success and result and result > 0 then
         if Config.Debug then
-            print('^2[REX-RANCH EXPORT]^7 Removed animal ' .. animalid)
+            print('^2[LXR-RANCH EXPORT]^7 Removed animal ' .. animalid)
         end
         
         -- Refresh all clients
-        TriggerClientEvent('rex-ranch:client:removeAnimal', -1, animalid)
-        TriggerEvent('rex-ranch:server:refreshAnimals')
+        TriggerClientEvent('lxr-ranch:client:removeAnimal', -1, animalid)
+        TriggerEvent('lxr-ranch:server:refreshAnimals')
         
         return true
     end
@@ -246,7 +254,7 @@ exports('updateAnimalStats', function(animalid, stats)
     
     table.insert(values, animalid)
     
-    local query = 'UPDATE rex_ranch_animals SET ' .. table.concat(updates, ', ') .. ' WHERE animalid = ?'
+    local query = 'UPDATE lxr_ranch_animals SET ' .. table.concat(updates, ', ') .. ' WHERE animalid = ?'
     
     local success, result = pcall(function()
         return MySQL.update.await(query, values)
@@ -254,7 +262,7 @@ exports('updateAnimalStats', function(animalid, stats)
     
     if success and result and result > 0 then
         -- Notify all clients about the update
-        TriggerClientEvent('rex-ranch:client:refreshSingleAnimal', -1, animalid, stats)
+        TriggerClientEvent('lxr-ranch:client:refreshSingleAnimal', -1, animalid, stats)
         return true
     end
     
@@ -290,7 +298,7 @@ exports('getStaffCount', function(ranchid)
     end
     
     if Config.Debug then
-        print('^2[REX-RANCH EXPORT]^7 Staff count for ' .. ranchid .. ': ' .. staffCount)
+        print('^2[LXR-RANCH EXPORT]^7 Staff count for ' .. ranchid .. ': ' .. staffCount)
     end
     
     return staffCount
@@ -303,7 +311,7 @@ exports('getRanchStatistics', function(ranchid)
     if not ranchid then return nil end
     
     local success, animals = pcall(function()
-        return MySQL.query.await("SELECT * FROM rex_ranch_animals WHERE ranchid = ?", { ranchid })
+        return MySQL.query.await("SELECT * FROM lxr_ranch_animals WHERE ranchid = ?", { ranchid })
     end)
     
     if not success or not animals then
@@ -358,3 +366,8 @@ exports('getRanchStatistics', function(ranchid)
     
     return stats
 end)
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 🐺 wolves.land — The Land of Wolves
+-- © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+-- ═══════════════════════════════════════════════════════════════════════════════

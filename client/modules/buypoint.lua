@@ -1,3 +1,11 @@
+--[[ ═══════════════════════════════════════════════════════════════════════════
+     🐺 LXR-RANCH — The Land of Wolves
+     ═══════════════════════════════════════════════════════════════════════════
+     Developer   : iBoss21 | Brand : The Lux Empire
+     https://www.wolves.land | https://discord.gg/CrKcWdfd3A
+     ═══════════════════════════════════════════════════════════════════════════
+     © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+     ═══════════════════════════════════════════════════════════════════════════ ]]
 local RSGCore = exports['rsg-core']:GetCoreObject()
 local buyPointNPCs = {} -- Track spawned buy point NPCs
 local buyPointBlips = {} -- Track spawned buy point blips
@@ -77,7 +85,7 @@ CreateThread(function()
                 icon = 'fas fa-shopping-cart',
                 label = 'Buy Animals',
                 onSelect = function()
-                    TriggerEvent('rex-ranch:client:openBuyMenu', buyPointData)
+                    TriggerEvent('lxr-ranch:client:openBuyMenu', buyPointData)
                 end,
                 distance = 3.0
             }
@@ -92,7 +100,7 @@ end)
 ---------------------------------------------
 -- open buy menu
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:openBuyMenu', function(buyPointData)
+RegisterNetEvent('lxr-ranch:client:openBuyMenu', function(buyPointData)
     local PlayerData = RSGCore.Functions.GetPlayerData()
     local playerjob = PlayerData.job.name
     
@@ -113,7 +121,7 @@ RegisterNetEvent('rex-ranch:client:openBuyMenu', function(buyPointData)
     end
     
     -- Check current animal count
-    RSGCore.Functions.TriggerCallback('rex-ranch:server:countanimals', function(animalCount)
+    RSGCore.Functions.TriggerCallback('lxr-ranch:server:countanimals', function(animalCount)
         local options = {}
         
         -- Header showing capacity
@@ -146,7 +154,7 @@ RegisterNetEvent('rex-ranch:client:openBuyMenu', function(buyPointData)
                 description = 'Price: $' .. Config.BullBuyPrice .. ' | Strong breeding bull for cattle production',
                 icon = 'fa-solid fa-dollar-sign',
                 onSelect = function()
-                    TriggerEvent('rex-ranch:client:confirmBuyAnimal', {
+                    TriggerEvent('lxr-ranch:client:confirmBuyAnimal', {
                         animalType = 'a_c_bull_01',
                         animalName = 'Bull',
                         price = Config.BullBuyPrice,
@@ -163,7 +171,7 @@ RegisterNetEvent('rex-ranch:client:openBuyMenu', function(buyPointData)
                 description = 'Price: $' .. Config.CowBuyPrice .. ' | Young cow ready for raising',
                 icon = 'fa-solid fa-dollar-sign',
                 onSelect = function()
-                    TriggerEvent('rex-ranch:client:confirmBuyAnimal', {
+                    TriggerEvent('lxr-ranch:client:confirmBuyAnimal', {
                         animalType = 'a_c_cow',
                         animalName = 'Cow',
                         price = Config.CowBuyPrice,
@@ -200,7 +208,7 @@ end)
 ---------------------------------------------
 -- confirm animal purchase
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:confirmBuyAnimal', function(data)
+RegisterNetEvent('lxr-ranch:client:confirmBuyAnimal', function(data)
     local PlayerData = RSGCore.Functions.GetPlayerData()
     local playerMoney = PlayerData.money.cash
     
@@ -226,7 +234,7 @@ RegisterNetEvent('rex-ranch:client:confirmBuyAnimal', function(data)
         -- Process the purchase
         lib.notify({ title = 'Processing Purchase', description = 'Buying ' .. data.animalName .. '...', type = 'inform' })
         
-        TriggerServerEvent('rex-ranch:server:buyAnimal', {
+        TriggerServerEvent('lxr-ranch:server:buyAnimal', {
             animalType = data.animalType,
             animalName = data.animalName,
             price = data.price,
@@ -270,3 +278,8 @@ AddEventHandler('onResourceStop', function(resourceName)
         print('^2[BUYPOINT DEBUG]^7 All buy point NPCs and blips cleaned up')
     end
 end)
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 🐺 wolves.land — The Land of Wolves
+-- © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+-- ═══════════════════════════════════════════════════════════════════════════════

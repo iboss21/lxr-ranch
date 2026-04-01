@@ -1,3 +1,11 @@
+--[[ ═══════════════════════════════════════════════════════════════════════════
+     🐺 LXR-RANCH — The Land of Wolves
+     ═══════════════════════════════════════════════════════════════════════════
+     Developer   : iBoss21 | Brand : The Lux Empire
+     https://www.wolves.land | https://discord.gg/CrKcWdfd3A
+     ═══════════════════════════════════════════════════════════════════════════
+     © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+     ═══════════════════════════════════════════════════════════════════════════ ]]
 local RSGCore = exports['rsg-core']:GetCoreObject()
 lib.locale()
 
@@ -5,7 +13,7 @@ lib.locale()
 -- Animal Overview Menu
 ---------------------------------------------
 
-RegisterNetEvent('rex-ranch:client:openAnimalOverview', function(ranchid)
+RegisterNetEvent('lxr-ranch:client:openAnimalOverview', function(ranchid)
     local Player = RSGCore.Functions.GetPlayerData()
     if not Player then return end
     
@@ -17,7 +25,7 @@ RegisterNetEvent('rex-ranch:client:openAnimalOverview', function(ranchid)
         duration = 2000
     })
     
-    RSGCore.Functions.TriggerCallback('rex-ranch:server:getAnimalOverview', function(data)
+    RSGCore.Functions.TriggerCallback('lxr-ranch:server:getAnimalOverview', function(data)
         if not data or not data.animals then
             lib.notify({
                 title = 'Error',
@@ -39,7 +47,7 @@ function showAnimalOverview(data, ranchid)
         title = '📊 Summary',
         description = string.format('Total: %d animals', data.summary.total),
         icon = 'fa-solid fa-chart-bar',
-        event = 'rex-ranch:client:showAnimalSummary',
+        event = 'lxr-ranch:client:showAnimalSummary',
         args = { summary = data.summary },
         arrow = true
     })
@@ -61,7 +69,7 @@ function showAnimalOverview(data, ranchid)
                 title = string.format('🏡 Ranch %s', ranch),
                 description = string.format('%d animals', #animals),
                 icon = 'fa-solid fa-home',
-                event = 'rex-ranch:client:showRanchAnimals',
+                event = 'lxr-ranch:client:showRanchAnimals',
                 args = { animals = animals, ranchid = ranch },
                 arrow = true
             })
@@ -101,7 +109,7 @@ function showAnimalOverview(data, ranchid)
                 title = string.format('%s %s', typeIcon, label),
                 description = string.format('%d animals%s', #animals, statusText),
                 icon = 'fa-solid fa-paw',
-                event = 'rex-ranch:client:showAnimalsByType',
+                event = 'lxr-ranch:client:showAnimalsByType',
                 args = { animals = animals, animalType = animalType, label = label },
                 arrow = true
             })
@@ -114,7 +122,7 @@ function showAnimalOverview(data, ranchid)
             title = '🔍 Filters',
             description = 'Filter animals by status',
             icon = 'fa-solid fa-filter',
-            event = 'rex-ranch:client:showAnimalFilters',
+            event = 'lxr-ranch:client:showAnimalFilters',
             args = { animals = data.animals, ranchid = ranchid },
             arrow = true
         })
@@ -133,7 +141,7 @@ end
 ---------------------------------------------
 -- Summary Display
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:showAnimalSummary', function(data)
+RegisterNetEvent('lxr-ranch:client:showAnimalSummary', function(data)
     local summary = data.summary
     local options = {}
     
@@ -218,7 +226,7 @@ end)
 ---------------------------------------------
 -- Ranch Animals Display (for multi-ranch view)
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:showRanchAnimals', function(data)
+RegisterNetEvent('lxr-ranch:client:showRanchAnimals', function(data)
     local animals = data.animals
     local ranchid = data.ranchid
     
@@ -256,7 +264,7 @@ RegisterNetEvent('rex-ranch:client:showRanchAnimals', function(data)
             title = string.format('%s %s', typeIcon, label),
             description = string.format('%d animals%s', #typeAnimals, statusText),
             icon = 'fa-solid fa-paw',
-            event = 'rex-ranch:client:showAnimalsByType',
+            event = 'lxr-ranch:client:showAnimalsByType',
             args = { animals = typeAnimals, animalType = animalType, label = label },
             arrow = true
         })
@@ -274,7 +282,7 @@ end)
 ---------------------------------------------
 -- Animals by Type Display
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:showAnimalsByType', function(data)
+RegisterNetEvent('lxr-ranch:client:showAnimalsByType', function(data)
     local animals = data.animals
     local animalType = data.animalType
     local label = data.label or getAnimalLabel(animalType)
@@ -324,7 +332,7 @@ RegisterNetEvent('rex-ranch:client:showAnimalsByType', function(data)
             title = title,
             description = description,
             icon = 'fa-solid fa-paw',
-            event = 'rex-ranch:client:showAnimalDetails',
+            event = 'lxr-ranch:client:showAnimalDetails',
             args = { animal = animal },
             arrow = true
         })
@@ -342,7 +350,7 @@ end)
 ---------------------------------------------
 -- Individual Animal Details
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:showAnimalDetails', function(data)
+RegisterNetEvent('lxr-ranch:client:showAnimalDetails', function(data)
     local animal = data.animal
     local options = {}
     
@@ -451,7 +459,7 @@ end)
 ---------------------------------------------
 -- Filter Menu
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:showAnimalFilters', function(data)
+RegisterNetEvent('lxr-ranch:client:showAnimalFilters', function(data)
     local animals = data.animals
     local ranchid = data.ranchid
     local options = {}
@@ -476,7 +484,7 @@ RegisterNetEvent('rex-ranch:client:showAnimalFilters', function(data)
         table.insert(options, {
             title = string.format('🤱 Pregnant Animals (%d)', pregnantCount),
             icon = 'fa-solid fa-baby',
-            event = 'rex-ranch:client:showFilteredAnimals',
+            event = 'lxr-ranch:client:showFilteredAnimals',
             args = { animals = animals, filter = 'pregnant', title = 'Pregnant Animals' },
             arrow = true
         })
@@ -486,7 +494,7 @@ RegisterNetEvent('rex-ranch:client:showAnimalFilters', function(data)
         table.insert(options, {
             title = string.format('💕 Ready to Breed (%d)', breedingReadyCount),
             icon = 'fa-solid fa-heart',
-            event = 'rex-ranch:client:showFilteredAnimals',
+            event = 'lxr-ranch:client:showFilteredAnimals',
             args = { animals = animals, filter = 'breeding_ready', title = 'Ready to Breed' },
             arrow = true
         })
@@ -496,7 +504,7 @@ RegisterNetEvent('rex-ranch:client:showAnimalFilters', function(data)
         table.insert(options, {
             title = string.format('🏥 Unhealthy Animals (%d)', unhealthyCount),
             icon = 'fa-solid fa-medical-note',
-            event = 'rex-ranch:client:showFilteredAnimals',
+            event = 'lxr-ranch:client:showFilteredAnimals',
             args = { animals = animals, filter = 'is_unhealthy', title = 'Unhealthy Animals' },
             arrow = true
         })
@@ -506,7 +514,7 @@ RegisterNetEvent('rex-ranch:client:showAnimalFilters', function(data)
         table.insert(options, {
             title = string.format('🍖 Hungry Animals (%d)', hungryCount),
             icon = 'fa-solid fa-utensils',
-            event = 'rex-ranch:client:showFilteredAnimals',
+            event = 'lxr-ranch:client:showFilteredAnimals',
             args = { animals = animals, filter = 'is_hungry', title = 'Hungry Animals' },
             arrow = true
         })
@@ -516,7 +524,7 @@ RegisterNetEvent('rex-ranch:client:showAnimalFilters', function(data)
         table.insert(options, {
             title = string.format('💧 Thirsty Animals (%d)', thirstyCount),
             icon = 'fa-solid fa-tint',
-            event = 'rex-ranch:client:showFilteredAnimals',
+            event = 'lxr-ranch:client:showFilteredAnimals',
             args = { animals = animals, filter = 'is_thirsty', title = 'Thirsty Animals' },
             arrow = true
         })
@@ -534,7 +542,7 @@ end)
 ---------------------------------------------
 -- Filtered Animals Display
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:showFilteredAnimals', function(data)
+RegisterNetEvent('lxr-ranch:client:showFilteredAnimals', function(data)
     local allAnimals = data.animals
     local filter = data.filter
     local title = data.title
@@ -566,7 +574,7 @@ RegisterNetEvent('rex-ranch:client:showFilteredAnimals', function(data)
             title = animalTitle,
             description = description,
             icon = 'fa-solid fa-paw',
-            event = 'rex-ranch:client:showAnimalDetails',
+            event = 'lxr-ranch:client:showAnimalDetails',
             args = { animal = animal },
             arrow = true
         })
@@ -614,3 +622,8 @@ function getAnimalTypeIcon(animalType)
     }
     return icons[animalType] or '🐾'
 end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 🐺 wolves.land — The Land of Wolves
+-- © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+-- ═══════════════════════════════════════════════════════════════════════════════

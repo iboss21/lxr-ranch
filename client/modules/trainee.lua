@@ -1,7 +1,15 @@
+--[[ ═══════════════════════════════════════════════════════════════════════════
+     🐺 LXR-RANCH — The Land of Wolves
+     ═══════════════════════════════════════════════════════════════════════════
+     Developer   : iBoss21 | Brand : The Lux Empire
+     https://www.wolves.land | https://discord.gg/CrKcWdfd3A
+     ═══════════════════════════════════════════════════════════════════════════
+     © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+     ═══════════════════════════════════════════════════════════════════════════ ]]
 local RSGCore = exports['rsg-core']:GetCoreObject()
 lib.locale()
 
-RegisterNetEvent('rex-ranch:client:opentraineemenu', function(ranchid)
+RegisterNetEvent('lxr-ranch:client:opentraineemenu', function(ranchid)
     local options = {
         {
             title = 'Ranch Information',
@@ -55,3 +63,8 @@ RegisterNetEvent('rex-ranch:client:opentraineemenu', function(ranchid)
     })
     lib.showContext('trainee_job_menu')
 end)
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 🐺 wolves.land — The Land of Wolves
+-- © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+-- ═══════════════════════════════════════════════════════════════════════════════

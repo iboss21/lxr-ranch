@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LXR Ranch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400&family=Great+Vibes&family=Playfair+Display:wght@400;500;600;700;800;900&family=Special+Elite&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="wl-app" class="wl-app">
+        <div class="wl-panel">
+
+            <!-- Parchment Header -->
+            <div class="wl-header">
+                <h1 class="wl-header__title">LXR RANCH</h1>
+                <p class="wl-header__subtitle">The Land of Wolves</p>
+            </div>
+
+            <!-- Tab Navigation -->
+            <nav class="wl-tabs">
+                <button class="wl-tabs__btn active" data-tab="overview">Overview</button>
+                <button class="wl-tabs__btn" data-tab="animals">Animals</button>
+                <button class="wl-tabs__btn" data-tab="production">Production</button>
+                <button class="wl-tabs__btn" data-tab="staff">Staff</button>
+                <button class="wl-tabs__btn" data-tab="storage">Storage</button>
+                <button class="wl-tabs__btn" data-tab="economy">Economy</button>
+            </nav>
+
+            <!-- Content Area -->
+            <div class="wl-content">
+
+                <!-- Overview Tab -->
+                <div class="wl-content__panel active" id="tab-overview">
+                    <div class="wl-grid wl-grid--stats">
+                        <div class="wl-card wl-card--stat">
+                            <span class="wl-card__label">Total Animals</span>
+                            <span class="wl-card__value" id="stat-animals">0</span>
+                        </div>
+                        <div class="wl-card wl-card--stat">
+                            <span class="wl-card__label">Staff Members</span>
+                            <span class="wl-card__value" id="stat-staff">0</span>
+                        </div>
+                        <div class="wl-card wl-card--stat">
+                            <span class="wl-card__label">Storage Used</span>
+                            <span class="wl-card__value" id="stat-storage">0%</span>
+                        </div>
+                        <div class="wl-card wl-card--stat">
+                            <span class="wl-card__label">Daily Income</span>
+                            <span class="wl-card__value" id="stat-income">$0.00</span>
+                        </div>
+                        <div class="wl-card wl-card--stat">
+                            <span class="wl-card__label">Ranch Level</span>
+                            <span class="wl-card__value" id="stat-level">1</span>
+                        </div>
+                        <div class="wl-card wl-card--stat">
+                            <span class="wl-card__label">Reputation</span>
+                            <span class="wl-card__value" id="stat-reputation">0</span>
+                        </div>
+                    </div>
+                    <div class="wl-card wl-card--info">
+                        <h3 class="wl-card__heading">Ranch Status</h3>
+                        <p class="wl-card__text" id="overview-status">No ranch data available.</p>
+                    </div>
+                    <div class="wl-card wl-card--info">
+                        <h3 class="wl-card__heading">Recent Activity</h3>
+                        <ul class="wl-list" id="overview-activity">
+                            <li class="wl-list__item">No recent activity.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Animals Tab -->
+                <div class="wl-content__panel" id="tab-animals">
+                    <div class="wl-grid wl-grid--animals" id="animals-list">
+                        <div class="wl-card wl-card--empty">
+                            <p class="wl-card__text">No animals on this ranch yet.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Production Tab -->
+                <div class="wl-content__panel" id="tab-production">
+                    <div id="production-list">
+                        <div class="wl-card wl-card--empty">
+                            <p class="wl-card__text">No active production.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Staff Tab -->
+                <div class="wl-content__panel" id="tab-staff">
+                    <div class="wl-grid wl-grid--staff" id="staff-list">
+                        <div class="wl-card wl-card--empty">
+                            <p class="wl-card__text">No staff employed.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Storage Tab -->
+                <div class="wl-content__panel" id="tab-storage">
+                    <div class="wl-card wl-card--info">
+                        <h3 class="wl-card__heading">Storage Capacity</h3>
+                        <div class="wl-progress">
+                            <div class="wl-progress__bar" id="storage-capacity-bar" style="width: 0%"></div>
+                        </div>
+                        <p class="wl-card__text" id="storage-capacity-text">0 / 0 slots used</p>
+                    </div>
+                    <div class="wl-grid wl-grid--storage" id="storage-grid">
+                        <div class="wl-card wl-card--empty">
+                            <p class="wl-card__text">Storage is empty.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Economy Tab -->
+                <div class="wl-content__panel" id="tab-economy">
+                    <div class="wl-card wl-card--info">
+                        <h3 class="wl-card__heading">Market Prices</h3>
+                        <p class="wl-card__text" id="economy-updated">Last updated: --</p>
+                    </div>
+                    <div class="wl-grid wl-grid--economy" id="economy-prices">
+                        <div class="wl-card wl-card--empty">
+                            <p class="wl-card__text">No market data available.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

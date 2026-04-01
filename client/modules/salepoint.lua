@@ -1,3 +1,11 @@
+--[[ ═══════════════════════════════════════════════════════════════════════════
+     🐺 LXR-RANCH — The Land of Wolves
+     ═══════════════════════════════════════════════════════════════════════════
+     Developer   : iBoss21 | Brand : The Lux Empire
+     https://www.wolves.land | https://discord.gg/CrKcWdfd3A
+     ═══════════════════════════════════════════════════════════════════════════
+     © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+     ═══════════════════════════════════════════════════════════════════════════ ]]
 local RSGCore = exports['rsg-core']:GetCoreObject()
 local salePointNPCs = {} -- Track spawned sale point NPCs
 local salePointBlips = {} -- Track spawned sale point blips
@@ -77,7 +85,7 @@ CreateThread(function()
                 icon = 'fas fa-hand-paper',
                 label = 'Sell Animals',
                 onSelect = function()
-                    TriggerEvent('rex-ranch:client:openSaleMenu', salePointData)
+                    TriggerEvent('lxr-ranch:client:openSaleMenu', salePointData)
                 end,
                 distance = 3.0
             }
@@ -92,7 +100,7 @@ end)
 ---------------------------------------------
 -- show sale points selector
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:showSalePoints', function(data)
+RegisterNetEvent('lxr-ranch:client:showSalePoints', function(data)
     local options = {}
     
     for _, salePointData in pairs(Config.SalePointLocations) do
@@ -101,7 +109,7 @@ RegisterNetEvent('rex-ranch:client:showSalePoints', function(data)
             description = 'Visit this livestock market to sell your animals',
             icon = 'fa-solid fa-location-dot',
             onSelect = function()
-                TriggerEvent('rex-ranch:client:openSaleMenu', salePointData)
+                TriggerEvent('lxr-ranch:client:openSaleMenu', salePointData)
             end,
             arrow = true
         })
@@ -118,7 +126,7 @@ end)
 ---------------------------------------------
 -- open sale menu
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:openSaleMenu', function(salePointData)
+RegisterNetEvent('lxr-ranch:client:openSaleMenu', function(salePointData)
     local PlayerData = RSGCore.Functions.GetPlayerData()
     local playerjob = PlayerData.job.name
     local joblevel = PlayerData.job.grade and PlayerData.job.grade.level or 0
@@ -144,7 +152,7 @@ RegisterNetEvent('rex-ranch:client:openSaleMenu', function(salePointData)
     end
     
     -- Get animals available for sale at this location
-    RSGCore.Functions.TriggerCallback('rex-ranch:server:getNearbyAnimalsForSale', function(animals)
+    RSGCore.Functions.TriggerCallback('lxr-ranch:server:getNearbyAnimalsForSale', function(animals)
         if not animals or #animals == 0 then
             if Config.RequireAnimalPresent then
                 lib.notify({ title = 'No Animals Nearby', description = 'You need to bring your animals to the sale point first! Use the herding system to move them.', type = 'inform' })
@@ -199,7 +207,7 @@ RegisterNetEvent('rex-ranch:client:openSaleMenu', function(salePointData)
                     description = 'Sell all nearby animals for a total of $' .. totalValue,
                     icon = 'fa-solid fa-hand-holding-dollar',
                     onSelect = function()
-                        TriggerEvent('rex-ranch:client:confirmSellAll', nearbyAnimals, salePointData.name, salePointData.coords)
+                        TriggerEvent('lxr-ranch:client:confirmSellAll', nearbyAnimals, salePointData.name, salePointData.coords)
                     end,
                     arrow = true
                 })
@@ -222,7 +230,7 @@ RegisterNetEvent('rex-ranch:client:openSaleMenu', function(salePointData)
                     description = 'Sell all your animals for a total of $' .. totalValue,
                     icon = 'fa-solid fa-hand-holding-dollar',
                     onSelect = function()
-                        TriggerEvent('rex-ranch:client:confirmSellAll', animals, salePointData.name, salePointData.coords)
+                        TriggerEvent('lxr-ranch:client:confirmSellAll', animals, salePointData.name, salePointData.coords)
                     end,
                     arrow = true
                 })
@@ -264,7 +272,7 @@ RegisterNetEvent('rex-ranch:client:openSaleMenu', function(salePointData)
                 description = description,
                 icon = 'fa-solid fa-dollar-sign',
                 onSelect = function()
-                    TriggerEvent('rex-ranch:client:confirmSale', animal, salePointData.name, salePointData.coords)
+                    TriggerEvent('lxr-ranch:client:confirmSale', animal, salePointData.name, salePointData.coords)
                 end,
                 arrow = true
             })
@@ -322,7 +330,7 @@ end
 ---------------------------------------------
 -- confirm sale
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:confirmSale', function(animal, salePointName, salePointCoords)
+RegisterNetEvent('lxr-ranch:client:confirmSale', function(animal, salePointName, salePointCoords)
     local animalName = GetAnimalDisplayName(animal.model)
     
     -- Check if animal is nearby before showing confirmation (only if proximity is required)
@@ -343,7 +351,7 @@ RegisterNetEvent('rex-ranch:client:confirmSale', function(animal, salePointName,
     })
     
     if alert == 'confirm' then
-        TriggerServerEvent('rex-ranch:server:sellAnimal', animal.animalid, animal.salePrice, salePointCoords)
+        TriggerServerEvent('lxr-ranch:server:sellAnimal', animal.animalid, animal.salePrice, salePointCoords)
         lib.notify({ title = 'Sale Confirmed', description = 'Processing sale...', type = 'inform' })
     end
 end)
@@ -351,7 +359,7 @@ end)
 ---------------------------------------------
 -- confirm sell all animals
 ---------------------------------------------
-RegisterNetEvent('rex-ranch:client:confirmSellAll', function(animals, salePointName, salePointCoords)
+RegisterNetEvent('lxr-ranch:client:confirmSellAll', function(animals, salePointName, salePointCoords)
     if not animals or #animals == 0 then
         lib.notify({ title = 'Error', description = 'No animals to sell!', type = 'error' })
         return
@@ -392,7 +400,7 @@ RegisterNetEvent('rex-ranch:client:confirmSellAll', function(animals, salePointN
         
         
         -- Trigger server event to sell all animals
-        TriggerServerEvent('rex-ranch:server:sellAllAnimals', animals, salePointCoords)
+        TriggerServerEvent('lxr-ranch:server:sellAllAnimals', animals, salePointCoords)
     end
 end)
 
@@ -420,3 +428,8 @@ AddEventHandler('onResourceStop', function(resourceName)
         salePointBlips[i] = nil
     end
 end)
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 🐺 wolves.land — The Land of Wolves
+-- © 2026 iBoss21 / The Lux Empire — All Rights Reserved
+-- ═══════════════════════════════════════════════════════════════════════════════
